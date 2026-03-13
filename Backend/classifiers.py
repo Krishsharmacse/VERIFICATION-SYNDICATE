@@ -6,8 +6,8 @@ import logging
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
-import torch
+# from transformers import AutoTokenizer, AutoModelForSequenceClassification
+# import torch
 import cv2
 from sklearn.ensemble import RandomForestClassifier
 

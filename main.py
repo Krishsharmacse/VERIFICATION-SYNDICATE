@@ -1,5 +1,6 @@
 # main.py
 import uvicorn
+import os
 import logging
 import warnings
 
@@ -12,10 +13,11 @@ from Backend.api.gemini_api import app
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+    port = int(os.environ.get("PORT", 8000))
     uvicorn.run(
         "Backend.api.gemini_api:app",
         host="0.0.0.0",
-        port=8000,
-        reload=True,
+        port=port,
+        reload=False,
         log_level="info"
     )
