@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verification syndicate · matrix</title>
+    <style>
+        /* ---- RESET & GLOBAL ---- */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0b0f1a;
+            font-family: 'Share Tech Mono', 'Courier New', monospace;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 16px;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* ---- matrix rain background (canvas) ---- */
+        #matrix-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+            opacity: 0.25;
+        }
+
+        /* ---- animated scanline & glitch overlays ---- */
+        .scanline {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 10px;
+            background: linear-gradient(180deg, rgba(0, 255, 255, 0.2) 0%, transparent 80%);
+            z-index: 2;
+            pointer-events: none;
+            animation: scan 8s linear infinite;
+            opacity: 0.4;
+        }
+
+        @keyframes scan {
+            0% {
+                top: -10px;
+            }
+
+            20% {
+                top: 20%;
+            }
+
+            40% {
+                top: 40%;
+            }
+
+            60% {
+                top: 60%;
+            }
+
+            80% {
+                top: 80%;
+            }
+
+            100% {
+                top: 110%;
+            }
+        }
+
+        .glitch-panel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(0deg, rgba(0, 40, 80, 0.1) 0px, rgba(0, 255, 200, 0.02) 2px, transparent 3px, transparent 8px);
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        /* ---- main container (hologlass) ---- */
+        .container {
+            position: relative;
+            z-index: 10;
+            background: rgba(8, 18, 28, 0.75);
+            backdrop-filter: blur(12px) saturate(180%);
+            -webkit-backdrop-filter: blur(12px) saturate(180%);
+            border: 1px solid #00ffe180;
+            box-shadow: 0 0 35px #00b8ff70, 0 0 15px #00ffbf inset;
+            border-radius: 36px;
+            max-width: 720px;
+            width: 100%;
+            padding: 36px 32px;
+            animation: flicker 6s infinite, float 4s ease-in-out infinite;
+            transition: border-color 0.2s;
+        }
+
+        @keyframes flicker {
+
+            0%,
+            19%,
+            21%,
+            23%,
+            25%,
+            54%,
+            56%,
+            100% {
+                opacity: 1;
+            }
+
+            20%,
+            24%,
+            55% {
+                opacity: 0.4;
+            }
+        }
+
+        @keyframes float {
+            0% {
+                transform: translateY(0px);
+            }
+
+            50% {
+                transform: translateY(-6px);
+            }
+
+            100% {
+                transform: translateY(0px);
+            }
+        }
+
+        /* ---- header with binary glitch ---- */
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+            position: relative;
+        }
+
+        .logo {
+            font-size: 64px;
+            filter: drop-shadow(0 0 12px #00ffe0);
+            animation: rotate-scale 3s alternate infinite ease;
+            display: inline-block;
+        }
+
+        @keyframes rotate-scale {
+            0% {
+                transform: scale(0.9) rotate(-2deg);
+                text-shadow: 0 0 5px cyan, 0 0 15px blue;
+            }
+
+            100% {
+                transform: scale(1.1) rotate(2deg);
+                text-shadow: 0 0 15px lime, 0 0 30px #00a6ff;
+            }
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 400;
+            letter-spacing: 6px;
+            text-transform: uppercase;
+            background: linear-gradient(135deg, #00ffae, #3f6eff, #80ffdb);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 8px;
+            filter: drop-shadow(0 0 12px #0ff);
+            animation: glitch-text 3s infinite;
+        }
+
+        @keyframes glitch-text {
+
+            0%,
+            100% {
+                clip-path: inset(0 0 0 0);
+                transform: skew(0deg);
+            }
+
+            5% {
+                clip-path: inset(2px 0 0 0);
+                transform: skew(2deg);
+                text-shadow: -2px 0 cyan;
+            }
+
+            10% {
+                clip-path: inset(0 2px 0 0);
+                transform: skew(-2deg);
+                text-shadow: 2px 0 lime;
+            }
+
+            15% {
+                clip-path: inset(0 0 2px 0);
+                transform: skew(0deg);
+                text-shadow: none;
+            }
+        }
+
+        .subtitle {
+            color: #8ae2ff;
+            font-size: 13px;
+            letter-spacing: 3px;
+            border-bottom: 1px dashed #00ffc3;
+            padding-bottom: 8px;
+            display: inline-block;
+        }
+
+        /* ---- terminal style input ---- */
+        .input-group {
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            color: #00ffc3;
+            font-size: 14px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            font-weight: 400;
+            text-shadow: 0 0 5px #00ffff;
+        }
+
+        .textarea-wrapper {
+            position: relative;
+        }
+
+        textarea {
+            width: 100%;
+            padding: 18px 20px;
+            background: #030b14;
+            border: 2px solid #0f4b6e;
+            border-radius: 24px;
+            font-family: 'Share Tech Mono', monospace;
+            font-size: 16px;
+            color: #b3ffe0;
+            resize: vertical;
+            min-height: 130px;
+            outline: none;
+            box-shadow: 0 0 30px #004466 inset, 0 0 15px #00ffcc;
+            transition: 0.2s all;
+            line-height: 1.5;
+        }
+
+        textarea:focus {
+            border-color: #00ffc3;
+            box-shadow: 0 0 30px #00ffe0, 0 0 60px #0077ff;
+            background: #010a14;
+        }
+
+        textarea::placeholder {
+            color: #2f5f77;
+            font-style: italic;
+        }
+
+        /* ---- hack-buttons ---- */
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 32px;
+        }
+
+        button {
+            flex: 1;
+            padding: 16px 12px;
+            background: transparent;
+            border: 2px solid #00ccba;
+            border-radius: 50px;
+            font-family: 'Share Tech Mono', monospace;
+            font-weight: bold;
+            font-size: 15px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            color: #00fff9;
+            cursor: pointer;
+            transition: 0.2s all;
+            box-shadow: 0 0 15px cyan, inset 0 0 10px rgba(0, 255, 255, 0.2);
+            backdrop-filter: blur(4px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        button::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, #00ffc080, transparent);
+            transition: left 0.5s;
+        }
+
+        button:hover:not(:disabled)::before {
+            left: 100%;
+        }
+
+        button:hover:not(:disabled) {
+            background: #00ccb050;
+            border-color: #00ffff;
+            box-shadow: 0 0 35px cyan, 0 0 70px blue;
+            color: white;
+            transform: scale(1.02);
+        }
+
+        .clear-btn {
+            border-color: #3f70a0;
+            color: #9fc9ff;
+            box-shadow: 0 0 15px #1f4f7f;
+        }
+
+        .clear-btn:hover {
+            border-color: #6eb0ff;
+            color: white;
+        }
+
+        button:disabled {
+            opacity: 0.3;
+            filter: grayscale(80%);
+            border-color: #2f4f6f;
+        }
+
+        /* ---- multimodal inputs ---- */
+        .multimodal-controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            flex: 1;
+        }
+
+        .file-input-wrapper input[type="file"] {
+            position: absolute;
+            width: 1;
+            height: 1;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .file-label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px;
+            background: rgba(0, 255, 195, 0.05);
+            border: 1px dashed #00ffc3;
+            border-radius: 12px;
+            color: #00ffc3;
+            font-size: 13px;
+            cursor: pointer;
+            transition: 0.2s all;
+        }
+
+        .file-label:hover {
+            background: rgba(0, 255, 195, 0.15);
+            box-shadow: 0 0 15px rgba(0, 255, 195, 0.3);
+        }
+
+        .file-label.active {
+            background: rgba(0, 255, 195, 0.2);
+            border-style: solid;
+            box-shadow: 0 0 20px rgba(0, 255, 195, 0.5);
+        }
+
+        .preview-container {
+            margin-top: 15px;
+            display: none;
+            border: 1px solid #00ffc3;
+            border-radius: 12px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        #imagePreview {
+            max-width: 100%;
+            max-height: 200px;
+            display: none;
+            border-radius: 8px;
+            margin: 0 auto;
+        }
+
+        #audioPreview {
+            width: 100%;
+            display: none;
+            margin-top: 5px;
+        }
+
+        /* ---- loading with "decrypting" style ---- */
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .decrypt-grid {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+            margin-bottom: 14px;
+        }
+
+        .decrypt-grid span {
+            width: 16px;
+            height: 16px;
+            background: #0ff;
+            border-radius: 2px;
+            animation: pulse-grid 0.9s infinite alternate;
+            box-shadow: 0 0 10px cyan;
+        }
+
+        .decrypt-grid span:nth-child(2) {
+            animation-delay: 0.2s;
+            background: #2effb8;
+        }
+
+        .decrypt-grid span:nth-child(3) {
+            animation-delay: 0.4s;
+            background: #6ea8ff;
+        }
+
+        .decrypt-grid span:nth-child(4) {
+            animation-delay: 0.6s;
+            background: #aa88ff;
+        }
+
+        .decrypt-grid span:nth-child(5) {
+            animation-delay: 0.8s;
+            background: #0ff;
+        }
+
+        @keyframes pulse-grid {
+            0% {
+                opacity: 0.3;
+                transform: scale(1);
+            }
+
+            100% {
+                opacity: 1;
+                transform: scale(1.3);
+                background: #00ffaa;
+                box-shadow: 0 0 25px white;
+            }
+        }
+
+        .loading-text {
+            color: #73ffcd;
+            font-size: 18px;
+            text-shadow: 0 0 10px #0ff;
+            animation: typewriter 2s steps(20) infinite;
+            white-space: nowrap;
+            overflow: hidden;
+            border-right: 2px solid cyan;
+            width: 18ch;
+            margin: 0 auto;
+        }
+
+        /* ---- result panel with neon glow ---- */
+        .result {
+            display: none;
+            animation: glitch-result 0.6s ease-out;
+        }
+
+        @keyframes glitch-result {
+            0% {
+                opacity: 0;
+                filter: blur(6px) hue-rotate(90deg);
+            }
+
+            50% {
+                opacity: 0.8;
+                transform: translateX(2px);
+            }
+
+            100% {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .verdict {
+            padding: 22px 16px;
+            border-radius: 30px;
+            text-align: center;
+            font-weight: 700;
+            margin-bottom: 22px;
+            border: 1px solid;
+            backdrop-filter: blur(10px);
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+
+        .verdict.FAKE {
+            background: rgba(180, 20, 50, 0.5);
+            border-color: #ff0055;
+            color: #ffb0c0;
+            box-shadow: 0 0 40px #ff0033;
+        }
+
+        .verdict.LIKELY_FAKE {
+            background: rgba(255, 80, 0, 0.5);
+            border-color: #ff6600;
+            color: #ffcf9a;
+            box-shadow: 0 0 40px #ff9900;
+        }
+
+        .verdict.UNCERTAIN {
+            background: rgba(200, 200, 0, 0.5);
+            border-color: #ffd966;
+            color: #ffffbb;
+            box-shadow: 0 0 40px yellow;
+        }
+
+        .verdict.LIKELY_TRUE {
+            background: rgba(0, 200, 150, 0.5);
+            border-color: #00ffaa;
+            color: #b0ffd0;
+            box-shadow: 0 0 40px #00ff80;
+        }
+
+        .verdict.TRUE {
+            background: rgba(0, 100, 255, 0.5);
+            border-color: #3f6eff;
+            color: #c6e2ff;
+            box-shadow: 0 0 50px #006eff;
+        }
+
+        .confidence {
+            background: #05121ecc;
+            backdrop-filter: blur(4px);
+            padding: 18px;
+            border-radius: 24px;
+            border: 1px solid #2f9bb0;
+            margin-bottom: 20px;
+        }
+
+        .confidence-label {
+            color: #6dd5ff;
+            margin-bottom: 12px;
+            font-size: 13px;
+        }
+
+        .confidence-bar {
+            height: 18px;
+            background: #102230;
+            border-radius: 40px;
+            border: 1px solid cyan;
+            overflow: hidden;
+            box-shadow: inset 0 0 8px black;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00f7b5, #3d7eff, #b060ff);
+            width: 0%;
+            border-radius: 40px;
+            box-shadow: 0 0 25px cyan;
+            animation: fill-glow 0.9s ease-out;
+        }
+
+        @keyframes fill-glow {
+            0% {
+                width: 0%;
+                background: #3f6eff;
+            }
+        }
+
+        .recommendation {
+            background: #091a28dd;
+            border-left: 6px solid #0ff;
+            padding: 18px;
+            border-radius: 18px;
+            color: #ccfff0;
+            margin-bottom: 24px;
+            font-size: 15px;
+            box-shadow: 0 0 25px #004466;
+            backdrop-filter: blur(2px);
+        }
+
+        .tips-section {
+            background: #0d1b27e0;
+            border-radius: 28px;
+            padding: 22px;
+            border: 1px dashed cyan;
+        }
+
+        .tips-title {
+            color: #0ff;
+            font-size: 16px;
+            margin-bottom: 16px;
+            letter-spacing: 2px;
+        }
+
+        .tips-list {
+            list-style: none;
+        }
+
+        .tips-list li {
+            padding: 8px 0 8px 24px;
+            color: #a5e6ff;
+            border-bottom: 1px solid #1f4f66;
+            position: relative;
+            font-size: 14px;
+        }
+
+        .tips-list li::before {
+            content: '>';
+            position: absolute;
+            left: 0;
+            color: #00ffb3;
+            font-weight: bold;
+            animation: blink 1.2s infinite;
+        }
+
+        /* ---- diagnostics panel for agents ---- */
+        .diagnostics {
+            background: rgba(4, 15, 25, 0.85);
+            border: 1px solid #1f4f66;
+            border-radius: 18px;
+            padding: 16px;
+            margin-bottom: 24px;
+            font-size: 13px;
+            color: #8ae2ff;
+        }
+
+        .diag-header {
+            color: #00ffc3;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 1px solid #1f4f66;
+            padding-bottom: 6px;
+        }
+
+        .diag-item {
+            margin-bottom: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .diag-label {
+            color: #3f6eff;
+            font-weight: bold;
+        }
+
+        .diag-value {
+            color: #c6e2ff;
+            background: #001528;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-family: monospace;
+            border-left: 2px solid #00ffb3;
+        }
+
+        /* ---- error box ---- */
+        .error {
+            background: #2f0a20e0;
+            border: 2px solid #ff2a6d;
+            border-radius: 40px;
+            padding: 15px 20px;
+            color: #ffb0bb;
+            display: none;
+            margin-bottom: 24px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 0 30px #ff0055;
+        }
+
+        /* ---- status line (hacker) ---- */
+        .status {
+            margin-top: 24px;
+            text-align: center;
+            color: #4fb5b5;
+            border-top: 1px solid #0f4f60;
+            padding-top: 18px;
+            font-size: 13px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .pulse-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #19f0d0;
+            box-shadow: 0 0 15px cyan;
+            animation: pulse-led 1.2s infinite;
+        }
+
+        .status.online .pulse-dot {
+            background: #1effbc;
+        }
+
+        .status.offline .pulse-dot {
+            background: #ff3a5e;
+            box-shadow: 0 0 20px red;
+        }
+
+        @keyframes pulse-led {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.3;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+
+        #statusText {
+            font-family: monospace;
+        }
+
+        /* ---- responsive ---- */
+        @media (max-width: 500px) {
+            .container {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 24px;
+                letter-spacing: 3px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- matrix rain canvas -->
+    <canvas id="matrix-canvas"></canvas>
+    <div class="scanline"></div>
+    <div class="glitch-panel"></div>
+
+    <div class="container">
+        <div class="header">
+            <div class="logo">⧩⧯⧫</div>
+            <h1>VERIFICATION SYNDICATE</h1>
+            <p class="subtitle">#TRUTH_DECODER // GREEN v1.0</p>
+        </div>
+
+        <div class="error" id="error"></div>
+
+        <div class="input-group">
+            <label for="textInput">>_ inject message to audit</label>
+            <div class="textarea-wrapper">
+                <textarea id="textInput" placeholder="e.g., 'Secret chip in vaccines' — paste here ..."></textarea>
+            </div>
+
+            <div class="multimodal-controls">
+                <div class="file-input-wrapper">
+                    <input type="file" id="imageInput" accept="image/*" onchange="handleFileSelect('image')">
+                    <label for="imageInput" class="file-label" id="imageLabel">
+                        <span>📷 Attach Media</span>
+                    </label>
+                </div>
+                <div class="file-input-wrapper">
+                    <input type="file" id="audioInput" accept="audio/*" onchange="handleFileSelect('audio')">
+                    <label for="audioInput" class="file-label" id="audioLabel">
+                        <span>🎤 Attach Audio</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="preview-container" id="previewContainer">
+                <img id="imagePreview" src="">
+                <audio id="audioPreview" controls></audio>
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button class="verify-btn" id="verifyBtn" onclick="verifyMessage()">⧗ verify.now</button>
+            <button class="clear-btn" id="clearBtn" onclick="clearInput()">⧬ clear</button>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="decrypt-grid">
+                <span></span><span></span><span></span><span></span><span></span>
+            </div>
+            <div class="loading-text">DECRYPTING..</div>
+        </div>
+
+        <div class="result" id="result">
+            <div class="verdict" id="verdictBox"></div>
+            <div class="confidence" id="confidenceBox"></div>
+
+            <div class="diagnostics" id="diagnosticsBox" style="display:none;">
+                <div class="diag-header">⫸ AGENT TELEMETRY ⫷</div>
+                <div class="diag-item" id="diagTranslator">
+                    <span class="diag-label">[NODE C] Translator Agent</span>
+                    <span class="diag-value"></span>
+                </div>
+                <div class="diag-item" id="diagSentiment">
+                    <span class="diag-label">[NODE D] NovEmoFake (Sentiment & Emotion)</span>
+                    <span class="diag-value"></span>
+                </div>
+                <div class="diag-item" id="diagRag">
+                    <span class="diag-label">[NODE E] RAG Vector Search</span>
+                    <span class="diag-value"></span>
+                </div>
+                <div class="diag-item" id="diagDuckDuckGo">
+                    <span class="diag-label">[NODE F] DuckDuckGo Verification</span>
+                    <span class="diag-value"></span>
+                </div>
+            </div>
+
+            <div class="recommendation" id="recommendationBox"></div>
+            <div class="tips-section" id="tipsSection" style="display:none;">
+                <div class="tips-title">⫸ hacking tips ⫷</div>
+                <ul class="tips-list" id="tipsList"></ul>
+            </div>
+        </div>
+
+        <div class="status offline" id="status">
+            <span class="pulse-dot"></span>
+            <span id="statusText">CHECKING SECURE LINK...</span>
+        </div>
+    </div>
+
+    <script>
+        // ---------- matrix canvas effect ----------
+        const canvas = document.getElementById('matrix-canvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン';
+        const fontSize = 18;
+        const columns = canvas.width / fontSize;
+        const drops = Array(Math.floor(columns)).fill(1);
+
+        function drawMatrix() {
+            ctx.fillStyle = 'rgba(8, 18, 28, 0.06)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#00ffb0';
+            ctx.font = fontSize + 'px "Share Tech Mono", monospace';
+
+            for (let i = 0; i < drops.length; i++) {
+                const text = chars[Math.floor(Math.random() * chars.length)];
+                const x = i * fontSize;
+                const y = drops[i] * fontSize;
+                ctx.fillText(text, x, y);
+
+                if (y > canvas.height && Math.random() > 0.975) {
+                    drops[i] = 0;
+                }
+                drops[i] += 0.8;
+            }
+        }
+        setInterval(drawMatrix, 45);
+
+        // ---------- API simulation / state ----------
+        const API_URL = '/api/verify';
+
+        function handleFileSelect(type) {
+            const input = document.getElementById(type + 'Input');
+            const label = document.getElementById(type + 'Label');
+            const previewContainer = document.getElementById('previewContainer');
+            const imagePreview = document.getElementById('imagePreview');
+            const audioPreview = document.getElementById('audioPreview');
+
+            if (input.files && input.files[0]) {
+                label.classList.add('active');
+                label.querySelector('span').textContent = '✓ ' + input.files[0].name.substring(0, 15) + '...';
+                previewContainer.style.display = 'block';
+
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    if (type === 'image') {
+                        imagePreview.src = e.target.result;
+                        imagePreview.style.display = 'block';
+                    } else {
+                        audioPreview.src = e.target.result;
+                        audioPreview.style.display = 'block';
+                    }
+                }
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        // mock result generator for innovative demo
+        function mockAnalysis(text) {
+            // heuristic pseudo‑random but determined by text length / keywords for demo
+            const lower = text.toLowerCase();
+            let verdict = 'UNCERTAIN';
+            let confidence = 0.5 + (Math.random() * 0.3 - 0.15); // between 0.35-0.8
+            let recommendation = '⚠️ Neural lattice uncertain — cross‑reference with primary sources.';
+            let tips = [];
+            let translatedText = text; // Mock translation
+            let ragMatch = 'NO_STRONG_MATCH';
+            let duckduckgoMatch = 'Pending Search...';
+            let sentimentAnalysis = 'Neutral Pattern Detected';
+
+            if (lower.includes('cure') || lower.includes('secret') || lower.includes('they don\'t want')) {
+                verdict = 'LIKELY_FAKE';
+                confidence = 0.82 + (Math.random() * 0.12);
+                recommendation = '⛔ Sensational claims with low verifiability. Check scientific consensus.';
+                tips = ['Look for peer‑reviewed studies', 'Check if major health orgs deny it', 'Verify date — old hoax?'];
+                ragMatch = 'Matched known hoax database (Confidence: 89%)';
+                duckduckgoMatch = 'SKIPPED (RAG Agent > 70%)';
+                sentimentAnalysis = 'High Fear (0.8), High Urgency (0.7) - Manipulation Tactic: Fear Mongering';
+            } else if (lower.includes('vote') || lower.includes('election')) {
+                verdict = 'LIKELY_TRUE';
+                confidence = 0.60 + (Math.random() * 0.25);
+                recommendation = '⚠️ Some signs of manipulation, but core may be factual. Verify with official sources.';
+                tips = ['Compare with election board data', 'Check if images are from correct year'];
+                ragMatch = 'Partial match in verified claims (Confidence: 65%)';
+                duckduckgoMatch = 'Cross-referenced 4 web claims. Veracity: Mixed/Misleading';
+                sentimentAnalysis = 'Anger (0.6), Surprise (0.5) - Manipulation Tactic: Emotional Overload';
+            } else if (lower.includes('virus') || lower.includes('hoax')) {
+                verdict = 'FAKE';
+                confidence = 0.92 + (Math.random() * 0.07);
+                recommendation = '🚨 Known disinformation pattern flagged. Do not share.';
+                tips = ['Search fact‑checking sites like snopes', 'Notice lack of credible sources'];
+                duckduckgoMatch = 'Verified 5 sources denying claim. Veracity: Likely False';
+                sentimentAnalysis = 'Disgust (0.8), Anger (0.7)';
+            } else if (lower.includes('hello') || lower.length < 15) {
+                verdict = 'UNCERTAIN';
+                confidence = 0.35;
+                recommendation = 'Input too short or generic — increase context for better analysis.';
+                tips = ['Provide more detailed claim', 'Include names, dates, or numbers'];
+            } else {
+                // random but fun
+                const r = Math.random();
+                if (r < 0.33) verdict = 'LIKELY_FAKE';
+                else if (r < 0.66) verdict = 'LIKELY_TRUE';
+                else verdict = 'UNCERTAIN';
+                confidence = 0.45 + Math.random() * 0.45;
+                recommendation = '🧬 Hybrid indicators. Use external verification.';
+                tips = ['Cross‑reference news', 'Reverse image search if visual'];
+                ragMatch = 'No match found in local vector db. Fallback to DuckDuckGo...';
+                duckduckgoMatch = 'Live Verified with 2 standard sources. Status: Unconfirmed';
+                sentimentAnalysis = 'Neutral Baseline (0.4)';
+            }
+
+            if (confidence > 1) confidence = 0.99;
+            return { verdict, confidence, recommendation, tips, translatedText, ragMatch, duckduckgoMatch, sentimentAnalysis };
+        }
+
+        async function checkStatus() {
+            // simulate network status always online for demo (green/blue hack)
+            // but we keep toggle to offline only if fetch fails (though we mock)
+            return new Promise((resolve) => {
+                setTimeout(() => {
+                    updateStatus(true);
+                    resolve(true);
+                }, 300);
+            });
+        }
+
+        function updateStatus(online) {
+            const statusEl = document.getElementById('status');
+            const statusText = document.getElementById('statusText');
+            const verifyBtn = document.getElementById('verifyBtn');
+            if (online) {
+                statusEl.classList.add('online');
+                statusEl.classList.remove('offline');
+                statusText.textContent = '⏚ SECURE_LINK ESTABLISHED · ENCRYPTED';
+                verifyBtn.disabled = false;
+            } else {
+                statusEl.classList.add('offline');
+                statusEl.classList.remove('online');
+                statusText.textContent = '✗ CONNECTION LOST · RETRY';
+                verifyBtn.disabled = true;
+            }
+        }
+
+        // main verification
+        async function verifyMessage() {
+            const text = document.getElementById('textInput').value.trim();
+            const imageInput = document.getElementById('imageInput');
+            const audioInput = document.getElementById('audioInput');
+
+            const errorEl = document.getElementById('error');
+            const resultEl = document.getElementById('result');
+            const loadingEl = document.getElementById('loading');
+            const verifyBtn = document.getElementById('verifyBtn');
+
+            errorEl.style.display = 'none';
+            if (!text && !imageInput.files[0] && !audioInput.files[0]) {
+                errorEl.textContent = '⛔ input (text, image, or audio) required, agent.';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            resultEl.style.display = 'none';
+            loadingEl.style.display = 'block';
+            verifyBtn.disabled = true;
+
+            const formData = new FormData();
+            if (text) formData.append('text', text);
+            if (imageInput.files[0]) formData.append('image', imageInput.files[0]);
+            if (audioInput.files[0]) formData.append('audio', audioInput.files[0]);
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    displayResultFromBackend(data);
+                    loadingEl.style.display = 'none';
+                    resultEl.style.display = 'block';
+                } else {
+                    throw new Error(data.error || 'Unknown server error');
+                }
+            } catch (e) {
+                console.error('API Error:', e);
+                // Fallback to mock for demo stability if configured, or just show error
+                errorEl.textContent = `⚠️ audit failure: ${e.message}`;
+                errorEl.style.display = 'block';
+                loadingEl.style.display = 'none';
+            } finally {
+                verifyBtn.disabled = false;
+                checkStatus();
+            }
+        }
+
+        function displayResultFromBackend(data) {
+            const verdictBox = document.getElementById('verdictBox');
+            const confidenceBox = document.getElementById('confidenceBox');
+            const recommendationBox = document.getElementById('recommendationBox');
+            const diagnosticsBox = document.getElementById('diagnosticsBox');
+            const diagTranslatorVal = document.querySelector('#diagTranslator .diag-value');
+            const diagSentimentVal = document.querySelector('#diagSentiment .diag-value');
+            const diagRagVal = document.querySelector('#diagRag .diag-value');
+            const diagDuckDuckGoVal = document.querySelector('#diagDuckDuckGo .diag-value');
+            const tipsSection = document.getElementById('tipsSection');
+            const tipsList = document.getElementById('tipsList');
+
+            const judgment = data.judgment || {};
+            const verdict = judgment.final_verdict || 'UNCERTAIN';
+            const confidence = judgment.fake_probability || 0.5;
+            const recommendation = judgment.recommendation || data.response || 'Verify from multiple angles.';
+            const tips = data.verification_tips || [];
+
+            // update verdict with dynamic class
+            verdictBox.className = `verdict ${verdict}`;
+            verdictBox.innerHTML = `
+                <div style="font-size: 13px; opacity:0.8; letter-spacing:3px;">VERDICT</div>
+                <span style="font-size: 28px;">${verdict.replace(/_/g, ' ')}</span>
+                <div style="font-size: 13px; margin-top: 10px;">certainty index: ${(confidence * 100).toFixed(0)}%</div>
+            `;
+
+            confidenceBox.innerHTML = `
+                <div class="confidence-label">MISINFORMATION PROBABILITY (LIVE SCAN)</div>
+                <div class="confidence-bar">
+                    <div class="confidence-fill" style="width: ${confidence * 100}%"></div>
+                </div>
+                <div class="confidence-value" style="color:#aaffdd;">${(confidence * 100).toFixed(1)}% weight detected</div>
+            `;
+
+            diagnosticsBox.style.display = 'block';
+            diagTranslatorVal.textContent = data.processing_stage || 'Completed';
+            diagSentimentVal.textContent = judgment.emotional_markers ? JSON.stringify(judgment.emotional_markers) : 'N/A';
+            diagRagVal.textContent = data.educational_content ? 'Found context' : 'No direct match';
+            diagDuckDuckGoVal.textContent = data.success ? 'Audit Successful' : 'Service Offline';
+
+            recommendationBox.textContent = recommendation;
+
+            if (tips && tips.length) {
+                tipsSection.style.display = 'block';
+                tipsList.innerHTML = tips.map(t => `<li>${t}</li>`).join('');
+            } else if (data.educational_content) {
+                tipsSection.style.display = 'block';
+                tipsList.innerHTML = `<li>${data.educational_content.substring(0, 100)}...</li>`;
+            } else {
+                tipsSection.style.display = 'none';
+            }
+        }
+
+        function clearInput() {
+            document.getElementById('textInput').value = '';
+            document.getElementById('imageInput').value = '';
+            document.getElementById('audioInput').value = '';
+            document.getElementById('imageLabel').classList.remove('active');
+            document.getElementById('imageLabel').querySelector('span').textContent = '📷 Attach Media';
+            document.getElementById('audioLabel').classList.remove('active');
+            document.getElementById('audioLabel').querySelector('span').textContent = '🎤 Attach Audio';
+            document.getElementById('previewContainer').style.display = 'none';
+            document.getElementById('imagePreview').style.display = 'none';
+            document.getElementById('audioPreview').style.display = 'none';
+
+            document.getElementById('result').style.display = 'none';
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('textInput').focus();
+        }
+
+        // ctrl+enter verify
+        document.getElementById('textInput').addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'Enter') {
+                verifyMessage();
+            }
+        });
+
+        window.addEventListener('load', () => {
+            document.getElementById('textInput').focus();
+        });
+
+        // periodic status check (mock stays online)
+        setInterval(() => checkStatus(), 8000);
+    </script>
+</body>
+
+</html>
