@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fake News & Deepfake Detector</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f4f7fb;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e7ef;
+        }
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 16px;
+            font-weight: 600;
+            color: #7b8a9b;
+            transition: all 0.2s;
+            border-radius: 8px 8px 0 0;
+        }
+        .tab.active {
+            color: #3498db;
+            border-bottom: 3px solid #3498db;
+            background: #f0f7ff;
+        }
+        .tab-content {
+            display: none;
+            padding: 20px 0;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #34495e;
+        }
+        textarea, input[type="file"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e7ef;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border 0.2s;
+            box-sizing: border-box;
+        }
+        textarea:focus, input[type="file"]:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+        button {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: background 0.2s;
+            width: 100%;
+        }
+        button:hover {
+            background: #2980b9;
+        }
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 15px;
+            background: #f8fafd;
+            border-left: 5px solid #3498db;
+            display: none;
+        }
+        .result.real {
+            border-left-color: #27ae60;
+        }
+        .result.fake {
+            border-left-color: #e74c3c;
+        }
+        .result h3 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        .result p {
+            margin: 8px 0;
+        }
+        .probability-bar {
+            height: 20px;
+            background: #ecf0f1;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .bar-fill {
+            height: 100%;
+            width: 0%;
+            transition: width 0.5s;
+        }
+        .bar-fill.real {
+            background: #27ae60;
+        }
+        .bar-fill.fake {
+            background: #e74c3c;
+        }
+        .detail-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+            display: none;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .error {
+            color: #e74c3c;
+            font-weight: 500;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Fake News & Deepfake Detector</h1>
+        
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('text')">📰 Text Claim</button>
+            <button class="tab" onclick="switchTab('audio')">🎤 Audio File</button>
+        </div>
+
+        <!-- Text Tab -->
+        <div id="text-tab" class="tab-content active">
+            <div class="form-group">
+                <label for="claim-text">Enter news claim or article text:</label>
+                <textarea id="claim-text" rows="6" placeholder="Paste the claim here..."></textarea>
+            </div>
+            <button onclick="analyzeText()">Analyze Text</button>
+        </div>
+
+        <!-- Audio Tab -->
+        <div id="audio-tab" class="tab-content">
+            <div class="form-group">
+                <label for="audio-file">Upload audio file (WAV, MP3, FLAC, M4A, OGG):</label>
+                <input type="file" id="audio-file" accept=".wav,.mp3,.flac,.m4a,.ogg">
+            </div>
+            <button onclick="analyzeAudio()">Analyze Audio</button>
+        </div>
+
+        <!-- Loader -->
+        <div class="loader" id="loader"></div>
+
+        <!-- Result Display -->
+        <div class="result" id="result">
+            <h3 id="result-title">Result</h3>
+            <div id="result-content"></div>
+        </div>
+    </div>
+
+    <script>
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
+            if (tab === 'text') {
+                document.querySelector('.tab:nth-child(1)').classList.add('active');
+                document.getElementById('text-tab').classList.add('active');
+            } else {
+                document.querySelector('.tab:nth-child(2)').classList.add('active');
+                document.getElementById('audio-tab').classList.add('active');
+            }
+            
+            // Hide previous result
+            document.getElementById('result').style.display = 'none';
+        }
+
+        function showLoader(show) {
+            document.getElementById('loader').style.display = show ? 'block' : 'none';
+        }
+
+        function displayResult(data, type) {
+            const resultDiv = document.getElementById('result');
+            const title = document.getElementById('result-title');
+            const content = document.getElementById('result-content');
+            
+            resultDiv.className = 'result';
+            if (type === 'text') {
+                const isReal = data.label.includes('REAL');
+                resultDiv.classList.add(isReal ? 'real' : 'fake');
+                title.innerText = isReal ? '✅ Real News' : '❌ Fake News';
+                
+                let detailsHtml = `
+                    <p><strong>Probability (Real):</strong> ${(data.probability_real * 100).toFixed(1)}%</p>
+                    <p><strong>Probability (Fake):</strong> ${(data.probability_fake * 100).toFixed(1)}%</p>
+                    <div class="probability-bar">
+                        <div class="bar-fill ${isReal ? 'real' : 'fake'}" style="width: ${(data.probability_real * 100)}%"></div>
+                    </div>
+                    <p><strong>Evidence found:</strong> ${data.evidence_found ? 'Yes' : 'No'}</p>
+                    <p><strong>Reasoning:</strong> ${data.reasoning}</p>
+                    <h4>Agent Scores:</h4>
+                    <div class="detail-item"><span>BiLSTM:</span> <span>${(data.details.bilstm * 100).toFixed(1)}%</span></div>
+                    <div class="detail-item"><span>FactCheck:</span> <span>${(data.details.factcheck * 100).toFixed(1)}%</span></div>
+                    <div class="detail-item"><span>NewsAPI:</span> <span>${(data.details.newsapi * 100).toFixed(1)}%</span></div>
+                    <div class="detail-item"><span>GNews:</span> <span>${(data.details.gnews * 100).toFixed(1)}%</span></div>
+                    <div class="detail-item"><span>LLM:</span> <span>${(data.details.llm * 100).toFixed(1)}%</span></div>
+                `;
+                content.innerHTML = detailsHtml;
+            } else {
+                // Audio result
+                const isFake = data.label.includes('FAKE');
+                resultDiv.classList.add(isFake ? 'fake' : 'real');
+                title.innerText = isFake ? '🔴 Fake / Synthetic Audio' : '🟢 Real Human Voice';
+                
+                let detailsHtml = `
+                    <p><strong>Score:</strong> ${data.score.toFixed(4)} (0=real, 1=fake)</p>
+                    <p><strong>Confidence:</strong> ${(data.confidence * 100).toFixed(1)}%</p>
+                    <div class="probability-bar">
+                        <div class="bar-fill ${isFake ? 'fake' : 'real'}" style="width: ${data.confidence * 100}%"></div>
+                    </div>
+                `;
+                content.innerHTML = detailsHtml;
+            }
+            
+            resultDiv.style.display = 'block';
+        }
+
+        function showError(message) {
+            const resultDiv = document.getElementById('result');
+            const title = document.getElementById('result-title');
+            const content = document.getElementById('result-content');
+            
+            resultDiv.className = 'result';
+            title.innerText = '⚠️ Error';
+            content.innerHTML = `<p class="error">${message}</p>`;
+            resultDiv.style.display = 'block';
+        }
+
+        async function analyzeText() {
+            const text = document.getElementById('claim-text').value.trim();
+            if (!text) {
+                alert('Please enter some text.');
+                return;
+            }
+
+            showLoader(true);
+            document.getElementById('result').style.display = 'none';
+
+            try {
+                const response = await fetch('/predict/text', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Server error');
+                }
+                
+                const data = await response.json();
+                displayResult(data, 'text');
+            } catch (err) {
+                showError(err.message);
+            } finally {
+                showLoader(false);
+            }
+        }
+
+        async function analyzeAudio() {
+            const fileInput = document.getElementById('audio-file');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('Please select an audio file.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            showLoader(true);
+            document.getElementById('result').style.display = 'none';
+
+            try {
+                const response = await fetch('/predict/audio', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Server error');
+                }
+                
+                const data = await response.json();
+                displayResult(data, 'audio');
+            } catch (err) {
+                showError(err.message);
+            } finally {
+                showLoader(false);
+            }
+        }
+    </script>
+</body>
+</html>
