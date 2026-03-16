@@ -9,3 +9,7 @@ wheels/
 # Virtual environments
 .venv
 .env
+.env.example
+vocab_nltk.pkl
+fake_news_bilstm_nltk.pth
+best_model.pth
