@@ -13,3 +13,4 @@ wheels/
 vocab_nltk.pkl
 fake_news_bilstm_nltk.pth
 best_model.pth
+News _dataset
