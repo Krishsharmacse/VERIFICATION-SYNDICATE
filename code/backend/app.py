@@ -372,7 +372,7 @@ class CNN_BiLSTM_Video(nn.Module):
 class DeepfakeVideoDetector:
     def __init__(self):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.face_model = YOLO(r"C:\Users\ASUS\Downloads\yolov8s-face-lindevs.onnx", task='detect') 
+        self.face_model = YOLO(r"C:\Users\ASUS\Desktop\Fake News\yolov8s-face-lindevs.onnx", task='detect') 
         self.model = CNN_BiLSTM_Video().to(self.device)
         self.model.load_state_dict(torch.load(VIDEO_MODEL_PATH, map_location=self.device))
         self.model.eval()
