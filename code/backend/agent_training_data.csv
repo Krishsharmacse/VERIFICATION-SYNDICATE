@@ -1,2 +1,5 @@
 claim_text,bilstm_prob,fc_prob,fc_found,newsapi_prob,newsapi_found,gnews_prob,gnews_found,llm_prob,llm_found,final_calculated_prob,predicted_label
 kim jong un fires ballistic missiles,0.7980526924133301,0.2,0,0.75,1,0.3,0,0.5,0,0.6499026346206664,✅ REAL NEWS
+"'Military coup in France'... Macron protests a video, and an African president calls",0.2,0,0.2,0,0.2,0,0.5,0,0.2,❌ FAKE NEWS
+A Largescale Drone Attack Known As Operation Spiderweb Launched By Ukraine,0.2,0,0.3,0,0.2,0,0.5,0,0.2,❌ FAKE NEWS
+India LPG Cylinder Shortage News Live Updates: LPG-laden ship reaches Mundra Port; govt assures uninterrupted supply,0.2,0,0.3,0,0.75,1,0.5,0,0.6475000000000001,✅ REAL NEWS

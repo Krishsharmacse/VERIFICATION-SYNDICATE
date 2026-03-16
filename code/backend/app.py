@@ -53,62 +53,7 @@ CSV_FILENAME = "agent_training_data.csv"
 stop_words = set(stopwords.words('english'))
 lemmatizer = WordNetLemmatizer()
 
-# ================= LOAD VOCAB =================
-try:
-    with open(r"C:\Users\ASUS\Desktop\Fake News\vocab_nltk.pkl", "rb") as f:
-        vocab = pickle.load(f)
-    print(f"✅ Vocabulary loaded: {len(vocab)} words")
-except FileNotFoundError:
-    print("❌ vocab_nltk.pkl not found!")
-    exit(1)
 
-VOCAB_SIZE = len(vocab)
-
-# ================= TEXT MODEL =================
-class ImprovedBiLSTM(nn.Module):
-    def __init__(self, vocab_size, embed_dim=128, hidden_dim=128, num_layers=2, dropout=0.5):
-        super().__init__()
-        self.embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
-        self.embedding_dropout = nn.Dropout(dropout)
-        
-        self.lstm = nn.LSTM(embed_dim, hidden_dim, num_layers=num_layers,
-                            batch_first=True, bidirectional=True,
-                            dropout=dropout if num_layers > 1 else 0)
-        
-        self.attention = nn.Linear(hidden_dim * 2, 1)
-        
-        self.classifier = nn.Sequential(
-            nn.Linear(hidden_dim * 2, 128),
-            nn.BatchNorm1d(128), 
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(128, 64),
-            nn.BatchNorm1d(64),  
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(64, 1)
-        )
-
-    def forward(self, x):
-        embedded = self.embedding(x)
-        embedded = self.embedding_dropout(embedded)
-        lstm_out, _ = self.lstm(embedded)
-        attention_weights = torch.softmax(self.attention(lstm_out), dim=1)
-        attended = torch.sum(attention_weights * lstm_out, dim=1)
-        output = self.classifier(attended)
-        return output.squeeze()
-
-# Load text model
-text_model_path = r"C:\Users\ASUS\Desktop\Fake News\fake_news_bilstm_nltk.pth"
-try:
-    text_model = ImprovedBiLSTM(VOCAB_SIZE).to(DEVICE)
-    state_dict = torch.load(text_model_path, map_location=DEVICE, weights_only=False)
-    text_model.load_state_dict(state_dict)
-    text_model.eval()
-    print("✅ Text model loaded successfully")
-except Exception as e:
-    print(f"❌ Error loading text model: {e}")
-    exit(1)
 
 # ================= TEXT CLEAN & EXTRACT =================
 def clean_text(text):
@@ -128,13 +73,7 @@ def clean_text(text):
         lemmatized.append(lemmatizer.lemmatize(word, pos=pos))
     return ' '.join(lemmatized)
 
-def text_to_seq(text):
-    seq = [vocab.get(w, 1) for w in text.split()]
-    if len(seq) < MAX_LEN:
-        seq += [0] * (MAX_LEN - len(seq))
-    else:
-        seq = seq[:MAX_LEN]
-    return seq
+
 
 def extract_smart_query(text):
     tokens = word_tokenize(text)
@@ -247,13 +186,13 @@ def openrouter_llm(text):
         return 0.50, 0.5, False
 
 # ================= TEXT PREDICTION WRAPPER =================
-def save_to_csv(text, model_prob, fc_prob, fc_found, news_prob, news_found, gnews_prob, gnews_found, llm_prob, llm_found, final_prob, label):
+def save_to_csv(text, fc_prob, fc_found, news_prob, news_found, gnews_prob, gnews_found, llm_prob, llm_found, final_prob, label):
     file_exists = os.path.isfile(CSV_FILENAME)
     with open(CSV_FILENAME, mode='a', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
         if not file_exists:
-            writer.writerow(["claim_text", "bilstm_prob", "fc_prob", "fc_found", "newsapi_prob", "newsapi_found", "gnews_prob", "gnews_found", "llm_prob", "llm_found", "final_calculated_prob", "predicted_label"])
-        writer.writerow([text, model_prob, fc_prob, int(fc_found), news_prob, int(news_found), gnews_prob, int(gnews_found), llm_prob, int(llm_found), final_prob, label])
+            writer.writerow(["claim_text", "fc_prob", "fc_found", "newsapi_prob", "newsapi_found", "gnews_prob", "gnews_found", "llm_prob", "llm_found", "final_calculated_prob", "predicted_label"])
+        writer.writerow([text, fc_prob, int(fc_found), news_prob, int(news_found), gnews_prob, int(gnews_found), llm_prob, int(llm_found), final_prob, label])
 
 def detect_news(text):
     print("\n" + "="*60)
@@ -261,13 +200,7 @@ def detect_news(text):
     print("="*60)
     
     cleaned = clean_text(text)
-    seq = text_to_seq(cleaned)
-    tensor = torch.tensor(seq).unsqueeze(0).to(DEVICE)
-    with torch.no_grad():
-        raw_prob = torch.sigmoid(text_model(tensor)).item()
-    
-    model_prob = raw_prob * 0.80  
-    print(f"\n📊 BiLSTM: raw={raw_prob:.1%}, adjusted={model_prob:.1%}")
+
     
     fc_prob, fc_conf, fc_found = google_factcheck(text)
     print(f"🔍 FactCheck: {fc_prob:.1%} (found={fc_found})")
@@ -293,33 +226,33 @@ def detect_news(text):
     else:
         if fc_found:
             print("\n   [!] Dynamic Route: Trusting FactCheck database.")
-            weights = [0.05, 0.65, 0.10, 0.10, 0.10]
+            weights = [0.65, 0.15, 0.10, 0.10]
             reasoning = "FactCheck directly validated/invalidated the claim."
             
         elif gnews_found or news_found:
             if gnews_found and not news_found:
                 print("\n   [!] Dynamic Route: GNews found evidence, NewsAPI missed. Trusting GNews heavily.")
-                weights = [0.05, 0.10, 0.05, 0.70, 0.10] 
+                weights = [0.10, 0.05, 0.75, 0.10] 
             elif news_found and not gnews_found:
                 print("\n   [!] Dynamic Route: NewsAPI found evidence, GNews missed. Trusting NewsAPI heavily.")
-                weights = [0.05, 0.10, 0.70, 0.05, 0.10]
+                weights = [0.10, 0.75, 0.05, 0.10]
             else:
                 print("\n   [!] Dynamic Route: Both News APIs found evidence.")
-                weights = [0.05, 0.10, 0.35, 0.40, 0.10]
+                weights = [0.10, 0.40, 0.40, 0.10]
             reasoning = "News search strongly weighted toward successful agents."
             
         elif llm_found and not (gnews_found or news_found):
             print("\n   [!] Dynamic Route: Trusting LLM for general knowledge/myth.")
-            weights = [0.10, 0.10, 0.10, 0.10, 0.60]
+            weights = [0.10, 0.15, 0.15, 0.60]
             reasoning = "LLM knowledge utilized due to lack of recent news."
             
         else:
             print("\n   [!] Dynamic Route: Using balanced fallback weights.")
-            weights = [0.05, 0.25, 0.15, 0.40, 0.15] 
+            weights = [0.25, 0.25, 0.25, 0.25] 
             reasoning = "Fallback balanced routing."
         
         active_weights = weights
-        active_probs = [model_prob, fc_prob, news_prob, gnews_prob, llm_prob]
+        active_probs = [fc_prob, news_prob, gnews_prob, llm_prob]
         
         total_weight = sum(active_weights)
         norm_weights = [w/total_weight for w in active_weights]
@@ -334,8 +267,7 @@ def detect_news(text):
     print(f"   Reasoning: {reasoning}")
     print(f"   Evidence found: {'✓' if evidence_found else '✗ NONE'}")
     print(f"{'='*60}")
-    
-    save_to_csv(text, model_prob, fc_prob, fc_found, news_prob, news_found, gnews_prob, gnews_found, llm_prob, llm_found, final_prob, label)
+    save_to_csv(text, fc_prob, fc_found, news_prob, news_found, gnews_prob, gnews_found, llm_prob, llm_found, final_prob, label)
     
     return {
         'label': label,
@@ -344,7 +276,6 @@ def detect_news(text):
         'evidence_found': evidence_found,
         'reasoning': reasoning,
         'details': {
-            'bilstm': model_prob,
             'factcheck': fc_prob,
             'newsapi': news_prob,
             'gnews': gnews_prob,
