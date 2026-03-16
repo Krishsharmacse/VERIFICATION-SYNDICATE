@@ -166,6 +166,7 @@
         <div class="tabs">
             <button class="tab active" onclick="switchTab('text')">📰 Text Claim</button>
             <button class="tab" onclick="switchTab('audio')">🎤 Audio File</button>
+            <button class="tab" onclick="switchTab('video')">🎥 Video File</button>
         </div>
 
         <!-- Text Tab -->
@@ -186,6 +187,15 @@
             <button onclick="analyzeAudio()">Analyze Audio</button>
         </div>
 
+        <!-- Video Tab -->
+        <div id="video-tab" class="tab-content">
+            <div class="form-group">
+                <label for="video-file">Upload video file (MP4, AVI, MOV, MKV):</label>
+                <input type="file" id="video-file" accept=".mp4,.avi,.mov,.mkv,.webm">
+            </div>
+            <button onclick="analyzeVideo()">Analyze Video</button>
+        </div>
+
         <!-- Loader -->
         <div class="loader" id="loader"></div>
 
@@ -204,9 +214,12 @@
             if (tab === 'text') {
                 document.querySelector('.tab:nth-child(1)').classList.add('active');
                 document.getElementById('text-tab').classList.add('active');
-            } else {
+            } else if (tab === 'audio') {
                 document.querySelector('.tab:nth-child(2)').classList.add('active');
                 document.getElementById('audio-tab').classList.add('active');
+            } else {
+                document.querySelector('.tab:nth-child(3)').classList.add('active');
+                document.getElementById('video-tab').classList.add('active');
             }
             
             // Hide previous result
@@ -244,7 +257,7 @@
                     <div class="detail-item"><span>LLM:</span> <span>${(data.details.llm * 100).toFixed(1)}%</span></div>
                 `;
                 content.innerHTML = detailsHtml;
-            } else {
+            } else if (type === 'audio') {
                 // Audio result
                 const isFake = data.label.includes('FAKE');
                 resultDiv.classList.add(isFake ? 'fake' : 'real');
@@ -258,6 +271,27 @@
                     </div>
                 `;
                 content.innerHTML = detailsHtml;
+            } else {
+                // Video result
+                const isFake = data.label.includes('FAKE');
+                resultDiv.classList.add(isFake ? 'fake' : 'real');
+                title.innerText = isFake ? '🔴 Fake / Synthetic Video' : (data.label.includes('UNABLE') ? '⚠️ Analysis Error' : '🟢 Real Human Video');
+                
+                if (data.label.includes('UNABLE')) {
+                    content.innerHTML = `<p>${data.details.message}</p>`;
+                } else {
+                    let detailsHtml = `
+                        <p><strong>Verdict:</strong> ${data.label}</p>
+                        <p><strong>Deepfake Probability:</strong> ${(data.score * 100).toFixed(1)}%</p>
+                        <div class="probability-bar">
+                            <div class="bar-fill ${isFake ? 'fake' : 'real'}" style="width: ${data.score * 100}%"></div>
+                        </div>
+                        <h4>Frame Analysis:</h4>
+                        <div class="detail-item"><span>Total Frames Scanned:</span> <span>${data.details.frames_analyzed}</span></div>
+                        <div class="detail-item"><span>Frames Flagged as Fake:</span> <span>${data.details.fake_frames} (${data.details.fake_percentage.toFixed(1)}%)</span></div>
+                    `;
+                    content.innerHTML = detailsHtml;
+                }
             }
             
             resultDiv.style.display = 'block';
@@ -332,6 +366,40 @@
                 
                 const data = await response.json();
                 displayResult(data, 'audio');
+            } catch (err) {
+                showError(err.message);
+            } finally {
+                showLoader(false);
+            }
+        }
+
+        async function analyzeVideo() {
+            const fileInput = document.getElementById('video-file');
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('Please select a video file.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            showLoader(true);
+            document.getElementById('result').style.display = 'none';
+
+            try {
+                const response = await fetch('/predict/video', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Server error');
+                }
+                
+                const data = await response.json();
+                displayResult(data, 'video');
             } catch (err) {
                 showError(err.message);
             } finally {

@@ -9,6 +9,16 @@ import torch.nn as nn
 import numpy as np
 import tensorflow as tf
 import librosa
+import collections
+import threading
+import queue
+import time
+import asyncio
+import cv2
+import shutil
+from PIL import Image
+from torchvision import models, transforms
+from ultralytics import YOLO
 from fastapi import FastAPI, File, UploadFile, HTTPException, Request, Form
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -395,6 +405,127 @@ def predict_audio(file_bytes):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ================= VIDEO MODEL AND DETECTOR =================
+VIDEO_MODEL_PATH = r"C:\Users\ASUS\Desktop\Fake News\ALL MODELS\best_celebdf_model_Krish.pt" 
+VIDEO_INPUT_SIZE = 224
+VIDEO_SEQ_LENGTH = 16        
+VIDEO_CONFIDENCE_THRESHOLD = 0.60
+VIDEO_EMA_ALPHA = 0.15       
+
+class CNN_BiLSTM_Video(nn.Module):
+    def __init__(self):
+        super().__init__()
+        weights = models.EfficientNet_B0_Weights.IMAGENET1K_V1
+        backbone = models.efficientnet_b0(weights=weights)
+        self.cnn = backbone.features
+        self.pool = nn.AdaptiveAvgPool2d(1)
+
+        self.lstm = nn.LSTM(
+            input_size=1280, hidden_size=256, num_layers=2, 
+            bidirectional=True, batch_first=True, dropout=0.3
+        )
+
+        self.classifier = nn.Sequential(
+            nn.Linear(512, 256), nn.ReLU(), nn.Dropout(0.5), nn.Linear(256, 2)
+        )
+
+    def forward(self, x):
+        B, T, C, H, W = x.shape
+        x = x.view(B*T, C, H, W)
+        feats = self.cnn(x)
+        feats = self.pool(feats).flatten(1)
+        feats = feats.view(B, T, -1)
+        lstm_out, _ = self.lstm(feats)
+        return self.classifier(lstm_out[:, -1, :])
+
+class DeepfakeVideoDetector:
+    def __init__(self):
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.face_model = YOLO(r"C:\Users\ASUS\Downloads\yolov8s-face-lindevs.onnx", task='detect') 
+        self.model = CNN_BiLSTM_Video().to(self.device)
+        self.model.load_state_dict(torch.load(VIDEO_MODEL_PATH, map_location=self.device))
+        self.model.eval()
+
+        self.transform = transforms.Compose([
+            transforms.Resize((VIDEO_INPUT_SIZE, VIDEO_INPUT_SIZE)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+
+        self.frame_buffer = collections.deque(maxlen=VIDEO_SEQ_LENGTH)
+        self.running = True
+        self.input_queue = queue.Queue(maxsize=1)
+        
+        self.current_prob = 0.0
+        self.smoothed_prob = 0.0
+        self.current_label = "Scanning..."
+        self.current_box = None 
+        
+        self.thread = threading.Thread(target=self._inference_loop, daemon=True)
+        self.thread.start()
+
+    def process_frame(self, frame):
+        if not self.input_queue.full():
+            self.input_queue.put(frame)
+
+    def _inference_loop(self):
+        while self.running:
+            try:
+                frame = self.input_queue.get(timeout=1)
+                results = self.face_model(frame, verbose=False, conf=0.5, device='cpu')[0]
+
+                if len(results.boxes) > 0:
+                    boxes = results.boxes.xyxy.cpu().numpy()
+                    areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+                    largest_idx = np.argmax(areas)
+                    x1, y1, x2, y2 = map(int, boxes[largest_idx])
+
+                    self.current_box = (x1, y1, x2, y2)
+
+                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    h, w, _ = frame.shape
+                    x1, y1 = max(0, x1), max(0, y1)
+                    x2, y2 = min(w, x2), min(h, y2)
+                    
+                    face_crop = frame_rgb[y1:y2, x1:x2]
+                    
+                    if face_crop.size > 0:
+                        pil_face = Image.fromarray(face_crop)
+                        face_tensor = self.transform(pil_face)
+                        self.frame_buffer.append(face_tensor)
+
+                        if len(self.frame_buffer) == VIDEO_SEQ_LENGTH:
+                            input_tensor = torch.stack(list(self.frame_buffer)).unsqueeze(0).to(self.device)
+                            with torch.no_grad():
+                                out = self.model(input_tensor)
+                                new_prob = torch.softmax(out, dim=1)[0, 1].item()
+                            
+                            self.smoothed_prob = (VIDEO_EMA_ALPHA * new_prob) + ((1 - VIDEO_EMA_ALPHA) * self.smoothed_prob)
+
+                            if self.smoothed_prob > VIDEO_CONFIDENCE_THRESHOLD:
+                                self.current_label = "FAKE"
+                            else:
+                                self.current_label = "REAL"
+                        else:
+                            self.current_label = f"BUFFERING {len(self.frame_buffer)}/{VIDEO_SEQ_LENGTH}"
+                else:
+                    self.current_box = None
+
+            except queue.Empty:
+                continue
+            except Exception as e:
+                pass
+
+    def get_status(self):
+        return self.current_label, self.smoothed_prob, self.current_box
+
+    def stop(self):
+        self.running = False
+        self.thread.join()
+
+# Global detector instance
+video_detector = None
+
 # ================= FASTAPI SETUP =================
 app = FastAPI(title="Fake News & Deepfake Audio Detector")
 
@@ -428,6 +559,98 @@ async def predict_audio_endpoint(file: UploadFile = File(...)):
         result = predict_audio(contents)  # we need to adapt to accept bytes
         return JSONResponse(content=result)
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/predict/video")
+async def predict_video_endpoint(file: UploadFile = File(...)):
+    global video_detector
+    
+    if not file.filename.lower().endswith(('.mp4', '.avi', '.mov', '.mkv', '.webm')):
+        raise HTTPException(status_code=400, detail="Unsupported video format.")
+    
+    if video_detector is None:
+        video_detector = DeepfakeVideoDetector()
+        
+    temp_path = f"temp_{file.filename}"
+    with open(temp_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    try:
+        cap = cv2.VideoCapture(temp_path)
+        
+        all_probs = []
+        fake_frames = 0
+        total_analyzed = 0
+        
+        if not cap.isOpened():
+            raise Exception("Failed to open uploaded video file.")
+
+        # Let's read every Nth frame to drastically speed up processing 
+        # since videos typically run at 30fps.
+        frame_skip = 5 
+        frame_count = 0
+
+        while True:
+            ret, frame = cap.read()
+            if not ret: 
+                break
+
+            frame_count += 1
+            if frame_count % frame_skip != 0:
+                continue
+
+            # Push to queue ONLY if not full, otherwise we block
+            while video_detector.input_queue.full() and video_detector.running:
+                await asyncio.sleep(0.01)
+
+            video_detector.process_frame(frame)
+            
+            # Allow the background AI thread some time to process
+            await asyncio.sleep(0.01)
+            
+            label, prob, box = video_detector.get_status()
+
+            if label in ["FAKE", "REAL"]:
+                all_probs.append(prob)
+                total_analyzed += 1
+                if label == "FAKE":
+                    fake_frames += 1
+
+        # Wait a moment for trailing buffers to deplete
+        await asyncio.sleep(0.5)
+        
+        cap.release()
+        os.remove(temp_path)
+        
+        if total_analyzed > 0:
+            avg_prob = sum(all_probs) / len(all_probs)
+            fake_percentage = (fake_frames / total_analyzed) * 100
+            is_fake = avg_prob > 0.5
+            
+            return JSONResponse(content={
+                'label': 'FAKE / SYNTHETIC VIDEO' if is_fake else 'REAL HUMAN VIDEO',
+                'score': avg_prob,
+                'confidence': avg_prob if is_fake else 1 - avg_prob,
+                'details': {
+                    'frames_analyzed': total_analyzed,
+                    'fake_frames': fake_frames,
+                    'fake_percentage': fake_percentage,
+                }
+            })
+        else:
+            return JSONResponse(content={
+                'label': 'UNABLE TO DETECT',
+                'score': 0.0,
+                'confidence': 0.0,
+                'details': {
+                    'frames_analyzed': 0,
+                    'message': "No face detected in video or video too short."
+                }
+            })
+            
+    except Exception as e:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
         raise HTTPException(status_code=500, detail=str(e))
 
 # For local development
