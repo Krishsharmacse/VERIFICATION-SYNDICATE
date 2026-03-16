@@ -334,7 +334,7 @@ if __name__ == "__main__":
     print("="*60)
     
     samples = [
-        """India LPG Cylinder Shortage News Live Updates: LPG-laden ship to reach India today; 22 Indian vessels yet to cross Strait of Hormuz""",
+        """kim jong un fires ballistic missiles""",
         """The 2023 World Press Freedom Index, released annually by Reporters Without Borders (RSF), highlights the increasingly perilous situation for reporters on every continent, as journalists face political, social, and technological threats. The report was released on World Press Freedom Day, which GIJN marked with a specific look at how investigative journalists are confronted with challenges to their work in Latin America, Africa, Central Asia, and the Middle East.""",
     ]
     

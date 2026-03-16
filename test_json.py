@@ -14,17 +14,15 @@ from sklearn.metrics import accuracy_score, classification_report, confusion_mat
 import seaborn as sns
 import matplotlib.pyplot as plt
 import pickle
-import warnings
+import warnings 
 warnings.filterwarnings("ignore")
 
-# ================= NLTK IMPORTS =================
 import nltk
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer, PorterStemmer
 from nltk.tokenize import word_tokenize
 from nltk import pos_tag, ne_chunk
 
-# Download required NLTK data
 print("Downloading NLTK data...")
 nltk.download('punkt', quiet=True)
 nltk.download('stopwords', quiet=True)
@@ -33,12 +31,12 @@ nltk.download('averaged_perceptron_tagger', quiet=True)
 nltk.download('maxent_ne_chunker', quiet=True)
 nltk.download('words', quiet=True)
 nltk.download('averaged_perceptron_tagger')
-# ================= DEVICE =================
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
 
-# ================= LOAD DATA =================
+
 true_path = r"C:\Users\ASUS\Desktop\Fake News\Datasets\archive\True.csv"
 fake_path = r"C:\Users\ASUS\Desktop\Fake News\Datasets\archive\Fake.csv"
 
@@ -59,7 +57,6 @@ df_news["content"] = df_news["title"] + " " + df_news["text"]
 df_news = df_news[["content", "label"]]
 
 
-# ================= LOAD LIAR DATASET =================
 liar_train = pd.read_csv(liar_train_path, sep="\t", header=None)
 liar_valid = pd.read_csv(liar_valid_path, sep="\t", header=None)
 liar_test = pd.read_csv(liar_test_path, sep="\t", header=None)
@@ -80,7 +77,7 @@ for df in [liar_train, liar_valid, liar_test]:
 
 liar_all = pd.concat([liar_train, liar_valid, liar_test])
 
-# ================= MERGE DATASETS =================
+
 merged_df = pd.concat([df_news, liar_all])
 merged_df = merged_df.sample(frac=1, random_state=42).reset_index(drop=True)
 
@@ -88,15 +85,12 @@ print("Total samples:", len(merged_df))
 print(merged_df["label"].value_counts())
 
 
-# ================= NLTK-BASED TEXT CLEANING =================
 print("\nApplying NLTK preprocessing...")
 
-# Initialize NLTK tools
 stop_words = set(stopwords.words('english'))
 lemmatizer = WordNetLemmatizer()
 stemmer = PorterStemmer()
 
-# Extended list of source-specific words to remove
 source_words = set([
     'reuters', 'cnn', 'fox', 'breitbart', 'nytimes', 'washingtonpost',
     'bbc', 'abc', 'nbc', 'cbs', 'ap', 'associated', 'press', 'apnews',
@@ -107,7 +101,6 @@ source_words = set([
     'september', 'october', 'november', 'december'
 ])
 
-# Fake news indicator words (words common in fake news headlines)
 fake_indicators = set([
     'shocking', 'breaking', 'exposed', 'warning', 'alert', 'urgent',
     'viral', 'incredible', 'unbelievable', 'mindblowing', 'secret',
@@ -119,44 +112,39 @@ def advanced_nltk_clean(text):
     """
     Advanced text preprocessing using NLTK
     """
-    # Convert to lowercase
+  
     text = str(text).lower()
     
-    # Remove URLs
+    
     text = re.sub(r"http\S+|www\S+|https\S+", "", text)
     
-    # Remove numbers and special characters (keep letters and spaces)
+  
     text = re.sub(r"[^a-z\s]", " ", text)
-    
-    # Tokenize using NLTK
+  
     tokens = word_tokenize(text)
     
-    # Remove stopwords and source words
     tokens = [t for t in tokens if t not in stop_words]
     tokens = [t for t in tokens if t not in source_words]
     
-    # Part-of-speech tagging for better lemmatization
+
     pos_tags = pos_tag(tokens)
-    
-    # Lemmatize based on POS tags
+
     lemmatized_tokens = []
     for word, tag in pos_tags:
-        # Convert POS tag for lemmatizer
-        if tag.startswith('V'):  # Verb
+
+        if tag.startswith('V'): 
             pos = 'v'
-        elif tag.startswith('J'):  # Adjective
+        elif tag.startswith('J'):  
             pos = 'a'
-        elif tag.startswith('R'):  # Adverb
+        elif tag.startswith('R'):  
             pos = 'r'
-        else:  # Noun (default)
+        else:  
             pos = 'n'
-        
-        # Lemmatize
+  
         lemmatized = lemmatizer.lemmatize(word, pos=pos)
         lemmatized_tokens.append(lemmatized)
     
-    # Optional: Apply stemming after lemmatization
-    # stemmed_tokens = [stemmer.stem(t) for t in lemmatized_tokens]
+
     
     # Join tokens back into text
     cleaned_text = ' '.join(lemmatized_tokens)
@@ -178,7 +166,6 @@ print("\nSample of cleaned text:")
 print(merged_df["content"].iloc[0][:200])
 
 
-# ================= OPTIONAL: EXTRACT NAMED ENTITIES =================
 def extract_named_entities(text):
     """
     Extract named entities (could be used as additional features)
@@ -194,10 +181,7 @@ def extract_named_entities(text):
     
     return entities
 
-# You could add named entities as features later if needed
 
-
-# ================= TRAIN TEST SPLIT =================
 X = merged_df["content"].values
 y = merged_df["label"].values
 
@@ -212,7 +196,6 @@ print("\nTrain size:", len(X_train))
 print("Test size:", len(X_test))
 
 
-# ================= BUILD VOCAB =================
 MAX_VOCAB = 20000
 MAX_LEN = 150
 
@@ -230,8 +213,6 @@ vocab = build_vocab(X_train)
 VOCAB_SIZE = len(vocab)
 print("Vocabulary size:", VOCAB_SIZE)
 
-
-# ================= TEXT → SEQUENCE =================
 def text_to_seq(text):
     tokens = text.split()
     seq = [vocab.get(w, 1) for w in tokens]
@@ -247,8 +228,6 @@ def text_to_seq(text):
 X_train_seq = np.array([text_to_seq(t) for t in X_train])
 X_test_seq = np.array([text_to_seq(t) for t in X_test])
 
-
-# ================= DATASET =================
 class FakeDataset(Dataset):
     def __init__(self, X, y):
         self.X = X
@@ -270,8 +249,6 @@ test_dataset = FakeDataset(X_test_seq, y_test)
 train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=64)
 
-
-# ================= IMPROVED MODEL WITH ATTENTION =================
 class ImprovedBiLSTM(nn.Module):
     def __init__(self, vocab_size, embed_dim=128, hidden_dim=128, num_layers=2, dropout=0.5):
         super().__init__()
