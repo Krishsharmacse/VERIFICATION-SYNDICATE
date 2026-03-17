@@ -35,13 +35,11 @@ import uvicorn
 from sarvamai import SarvamAI
 from langdetect import detect, LangDetectException
 
-# ================= DOWNLOAD NLTK DATA =================
 nltk.download('punkt', quiet=True)
 nltk.download('stopwords', quiet=True)
 nltk.download('wordnet', quiet=True)
 nltk.download('averaged_perceptron_tagger', quiet=True)
 
-# ================= CONFIG =================
 load_dotenv()
 GOOGLE_FACT_CHECK_API_KEY = os.getenv("GOOGLE_FACT_CHECK_API_KEY")
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
@@ -56,7 +54,6 @@ CSV_FILENAME = "agent_training_data.csv"
 stop_words = set(stopwords.words('english'))
 lemmatizer = WordNetLemmatizer()
 
-# --- INITIALIZE SARVAM CLIENT ---
 if SARVAM_API_KEY:
     sarvam_client = SarvamAI(api_subscription_key=SARVAM_API_KEY)
 else:
@@ -65,7 +62,7 @@ else:
 
 
 
-# ================= TRANSLATION HELPER =================
+
 def translate_to_english(text):
     if not sarvam_client:
         return text
@@ -86,7 +83,6 @@ def translate_to_english(text):
         print(f"❌ Translation failed: {e}")
         return text
 
-# ================= TEXT CLEAN & EXTRACT =================
 def clean_text(text):
     text = str(text).lower()
     text = re.sub(r"http\S+|www\S+|https\S+", "", text)
@@ -124,7 +120,6 @@ def extract_smart_query(text):
         
     return " ".join(combined[:5])
 
-# ================= TEXT AGENTS =================
 def google_factcheck(text):
     try:
         params = {"query": text[:200], "key": GOOGLE_FACT_CHECK_API_KEY, "languageCode": "en"}
@@ -216,7 +211,6 @@ def openrouter_llm(text):
         print(f"   [!] LLM API Failed: {e}")
         return 0.50, 0.5, False
 
-# ================= TEXT PREDICTION WRAPPER =================
 def save_to_csv(text, fc_prob, fc_found, news_prob, news_found, gnews_prob, gnews_found, llm_prob, llm_found, final_prob, label):
     file_exists = os.path.isfile(CSV_FILENAME)
     with open(CSV_FILENAME, mode='a', newline='', encoding='utf-8') as file:
@@ -230,7 +224,6 @@ def detect_news(text):
     print(f"📰 Claim: {text}")
     print("="*60)
     
-    # --- TRANSLATION LOGIC ---
     try:
         detected_lang = detect(text)
         if detected_lang != 'en':
@@ -324,7 +317,6 @@ def detect_news(text):
         }
     }
 
-# ================= AUDIO MODEL =================
 KERAS_MODEL_PATH = r"C:\Users\ASUS\Desktop\Fake News\ALL MODELS\wavlm_classifier_v2.keras"
 WAVLM_MODEL_NAME = "microsoft/wavlm-base-plus"
 SAMPLE_RATE = 16000
@@ -344,7 +336,7 @@ except Exception as e:
 
 def predict_audio(file_bytes):
     try:
-        # Load audio from bytes via BytesIO
+
         audio_stream = io.BytesIO(file_bytes)
         y, sr = librosa.load(audio_stream, sr=SAMPLE_RATE)
         max_len = SAMPLE_RATE * MAX_DURATION
@@ -354,7 +346,6 @@ def predict_audio(file_bytes):
         else:
             y = y[:max_len]
         
-        # Extract WavLM embeddings
         inputs = feature_extractor(y, sampling_rate=SAMPLE_RATE, return_tensors="pt").to(DEVICE)
         
         with torch.no_grad():
@@ -362,8 +353,7 @@ def predict_audio(file_bytes):
         
         hidden_states = outputs.last_hidden_state if hasattr(outputs, 'last_hidden_state') else outputs[0]
         embedding = torch.mean(hidden_states, dim=1).cpu().numpy()
-        
-        # Classify
+      
         score = keras_model.predict(embedding, verbose=0)[0][0]
         
         is_fake = score > 0.5
@@ -377,7 +367,6 @@ def predict_audio(file_bytes):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ================= VIDEO MODEL AND DETECTOR =================
 VIDEO_MODEL_PATH = r"C:\Users\ASUS\Desktop\Fake News\ALL MODELS\best_celebdf_model_Krish.pt" 
 VIDEO_INPUT_SIZE = 224
 VIDEO_SEQ_LENGTH = 16        
@@ -495,7 +484,6 @@ class DeepfakeVideoDetector:
         self.running = False
         self.thread.join()
 
-# Global detector instance
 video_detector = None
 
 app = FastAPI(title="Fake News & Deepfake Audio Detector")
@@ -526,8 +514,7 @@ async def predict_audio_endpoint(file: UploadFile = File(...)):
     
     try:
         contents = await file.read()
-        # librosa can handle file-like objects; we pass bytes
-        result = predict_audio(contents)  # we need to adapt to accept bytes
+        result = predict_audio(contents)  
         return JSONResponse(content=result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -556,8 +543,7 @@ async def predict_video_endpoint(file: UploadFile = File(...)):
         if not cap.isOpened():
             raise Exception("Failed to open uploaded video file.")
 
-        # Let's read every Nth frame to drastically speed up processing 
-        # since videos typically run at 30fps.
+
         frame_skip = 5 
         frame_count = 0
 
@@ -570,13 +556,13 @@ async def predict_video_endpoint(file: UploadFile = File(...)):
             if frame_count % frame_skip != 0:
                 continue
 
-            # Push to queue ONLY if not full, otherwise we block
+          
             while video_detector.input_queue.full() and video_detector.running:
                 await asyncio.sleep(0.01)
 
             video_detector.process_frame(frame)
             
-            # Allow the background AI thread some time to process
+
             await asyncio.sleep(0.01)
             
             label, prob, box = video_detector.get_status()
@@ -587,7 +573,6 @@ async def predict_video_endpoint(file: UploadFile = File(...)):
                 if label == "FAKE":
                     fake_frames += 1
 
-        # Wait a moment for trailing buffers to deplete
         await asyncio.sleep(0.5)
         
         cap.release()
@@ -624,6 +609,5 @@ async def predict_video_endpoint(file: UploadFile = File(...)):
             os.remove(temp_path)
         raise HTTPException(status_code=500, detail=str(e))
 
-# For local development
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
