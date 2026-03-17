@@ -3,408 +3,156 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fake News & Deepfake Detector</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #f4f7fb;
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-        }
-        .container {
-            max-width: 800px;
-            width: 100%;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            padding: 30px;
-        }
-        h1 {
-            text-align: center;
-            color: #2c3e50;
-            margin-bottom: 30px;
-        }
-        .tabs {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #e0e7ef;
-        }
-        .tab {
-            padding: 12px 24px;
-            cursor: pointer;
-            border: none;
-            background: none;
-            font-size: 16px;
-            font-weight: 600;
-            color: #7b8a9b;
-            transition: all 0.2s;
-            border-radius: 8px 8px 0 0;
-        }
-        .tab.active {
-            color: #3498db;
-            border-bottom: 3px solid #3498db;
-            background: #f0f7ff;
-        }
-        .tab-content {
-            display: none;
-            padding: 20px 0;
-        }
-        .tab-content.active {
-            display: block;
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-            color: #34495e;
-        }
-        textarea, input[type="file"] {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e0e7ef;
-            border-radius: 10px;
-            font-size: 16px;
-            transition: border 0.2s;
-            box-sizing: border-box;
-        }
-        textarea:focus, input[type="file"]:focus {
-            outline: none;
-            border-color: #3498db;
-        }
-        button {
-            background: #3498db;
-            color: white;
-            border: none;
-            padding: 14px 28px;
-            font-size: 16px;
-            font-weight: 600;
-            border-radius: 10px;
-            cursor: pointer;
-            transition: background 0.2s;
-            width: 100%;
-        }
-        button:hover {
-            background: #2980b9;
-        }
-        .result {
-            margin-top: 30px;
-            padding: 20px;
-            border-radius: 15px;
-            background: #f8fafd;
-            border-left: 5px solid #3498db;
-            display: none;
-        }
-        .result.real {
-            border-left-color: #27ae60;
-        }
-        .result.fake {
-            border-left-color: #e74c3c;
-        }
-        .result h3 {
-            margin-top: 0;
-            color: #2c3e50;
-        }
-        .result p {
-            margin: 8px 0;
-        }
-        .probability-bar {
-            height: 20px;
-            background: #ecf0f1;
-            border-radius: 10px;
-            overflow: hidden;
-            margin: 10px 0;
-        }
-        .bar-fill {
-            height: 100%;
-            width: 0%;
-            transition: width 0.5s;
-        }
-        .bar-fill.real {
-            background: #27ae60;
-        }
-        .bar-fill.fake {
-            background: #e74c3c;
-        }
-        .detail-item {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 5px;
-        }
-        .loader {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #3498db;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 20px auto;
-            display: none;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .error {
-            color: #e74c3c;
-            font-weight: 500;
-            margin-top: 10px;
-        }
-    </style>
+    <title>Verification Syndicate</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <div class="container">
-        <h1>🔍 Fake News & Deepfake Detector</h1>
-        
+
+<canvas id="matrix-canvas"></canvas>
+<div class="scanline"></div>
+<div class="glitch-panel"></div>
+
+<div class="container page-enter">
+
+    <!-- HEADER -->
+    <div class="card-header">
+        <div class="header">
+            <div class="logo-wrap">
+                <span class="logo-glyph">⧩</span>
+                <span class="logo-glyph">⧯</span>
+                <span class="logo-glyph">⧫</span>
+            </div>
+            <h1>Verification Syndicate</h1>
+            <p class="subtitle">
+                <span class="subtitle-dot"></span>
+                #truth_decoder · signal v2.0
+            </p>
+        </div>
+    </div>
+
+    <!-- BODY -->
+    <div class="card-body">
+
+        <!-- Error box -->
+        <div class="error-box" id="errorBox"></div>
+
+        <!-- Tabs -->
         <div class="tabs">
-            <button class="tab active" onclick="switchTab('text')">📰 Text Claim</button>
-            <button class="tab" onclick="switchTab('audio')">🎤 Audio File</button>
-            <button class="tab" onclick="switchTab('video')">🎥 Video File</button>
+            <div class="tab active" onclick="switchTab('text')">📰 &nbsp;Text Claim</div>
+            <div class="tab" onclick="switchTab('audio')">🎤 &nbsp;Audio File</div>
+            <div class="tab" onclick="switchTab('video')">🎥 &nbsp;Video File</div>
         </div>
 
         <!-- Text Tab -->
         <div id="text-tab" class="tab-content active">
-            <div class="form-group">
-                <label for="claim-text">Enter news claim or article text:</label>
-                <textarea id="claim-text" rows="6" placeholder="Paste the claim here..."></textarea>
+            <div class="input-group">
+                <div class="field-label">Enter news claim or article text</div>
+                <textarea id="claim-text" rows="6" placeholder="Paste the claim here…"></textarea>
             </div>
-            <button onclick="analyzeText()">Analyze Text</button>
+            <button class="btn btn-primary" onclick="analyzeText()">⧗ &nbsp;Analyze Text</button>
         </div>
 
         <!-- Audio Tab -->
         <div id="audio-tab" class="tab-content">
-            <div class="form-group">
-                <label for="audio-file">Upload audio file (WAV, MP3, FLAC, M4A, OGG):</label>
-                <input type="file" id="audio-file" accept=".wav,.mp3,.flac,.m4a,.ogg">
+            <div class="input-group">
+                <div class="field-label">Upload audio file</div>
+                <div class="file-input-wrapper">
+                    <input type="file" id="audio-file" accept=".wav,.mp3,.flac,.m4a,.ogg" onchange="updateFileLabel('audio-file','audio-file-label')">
+                    <label for="audio-file" class="styled-file-label" id="audio-file-label">🎤 &nbsp;Choose Audio File (.wav, .mp3, .flac, .m4a, .ogg)</label>
+                </div>
             </div>
-            <button onclick="analyzeAudio()">Analyze Audio</button>
+            <div id="audio-preview-container" style="display: none; margin-bottom: 24px; text-align: center; border: 1px dashed rgba(0,240,180,0.22); border-radius: var(--r-md); padding: 20px; background: rgba(0, 240, 180, 0.04);">
+                <div class="field-label" style="justify-content: center;">Audio Preview</div>
+                <div class="custom-audio-player">
+                    <button class="audio-play-btn" id="audio-play-btn">▶</button>
+                    <div class="audio-track-container" id="audio-track">
+                        <div class="audio-progress" id="audio-progress"></div>
+                    </div>
+                    <div class="audio-time-display" id="audio-time">0:00 / 0:00</div>
+                    <audio id="audio-preview" style="display:none;"></audio>
+                </div>
+                <button class="remove-media-btn" onclick="clearFile('audio')">⨯ Remove Audio</button>
+            </div>
+            <button class="btn btn-primary" onclick="analyzeAudio()">⧗ &nbsp;Analyze Audio</button>
         </div>
 
         <!-- Video Tab -->
         <div id="video-tab" class="tab-content">
-            <div class="form-group">
-                <label for="video-file">Upload video file (MP4, AVI, MOV, MKV):</label>
-                <input type="file" id="video-file" accept=".mp4,.avi,.mov,.mkv,.webm">
+            <div class="input-group">
+                <div class="field-label">Upload video file</div>
+                <div class="file-input-wrapper">
+                    <input type="file" id="video-file" accept=".mp4,.avi,.mov,.mkv,.webm" onchange="updateFileLabel('video-file','video-file-label')">
+                    <label for="video-file" class="styled-file-label" id="video-file-label">🎥 &nbsp;Choose Video File (.mp4, .avi, .mov, .mkv, .webm)</label>
+                </div>
             </div>
-            <button onclick="analyzeVideo()">Analyze Video</button>
+            <div id="video-preview-container" style="display: none; margin-bottom: 24px; text-align: center; border: 1px dashed rgba(0,240,180,0.22); border-radius: var(--r-md); padding: 16px; background: rgba(0, 240, 180, 0.04);">
+                <div class="field-label" style="justify-content: center;">Video Preview</div>
+                <video id="video-preview" controls style="max-width: 100%; max-height: 300px; border-radius: var(--r-sm); outline: none; border: 1px solid rgba(0,240,180,0.2);"></video>
+                <br>
+                <button class="remove-media-btn" onclick="clearFile('video')">⨯ Remove Video</button>
+            </div>
+            <button class="btn btn-primary" onclick="analyzeVideo()">⧗ &nbsp;Analyze Video</button>
         </div>
 
         <!-- Loader -->
-        <div class="loader" id="loader"></div>
+        <div class="loader" id="loader">
+            <div class="decrypt-grid">
+                <span></span><span></span><span></span><span></span><span></span>
+            </div>
+            <div class="loading-text">Decrypting signal<span class="cursor"></span></div>
+        </div>
 
         <!-- Result Display -->
         <div class="result" id="result">
-            <h3 id="result-title">Result</h3>
-            <div id="result-content"></div>
+            <div class="result-divider"></div>
+
+            <!-- Verdict -->
+            <div class="verdict-box" id="verdict-box">
+                <div class="verdict-eyebrow">Verdict</div>
+                <div class="verdict-label" id="result-title"></div>
+            </div>
+
+            <!-- Confidence bars -->
+            <div class="confidence" id="confidence-box">
+                <div class="confidence-header">
+                    <span class="confidence-label" id="conf-label">Probability</span>
+                    <span class="confidence-pct" id="conf-pct"></span>
+                </div>
+                <div class="confidence-bar">
+                    <div class="confidence-fill" id="conf-fill"></div>
+                </div>
+            </div>
+
+            <!-- Diagnostics / agent scores -->
+            <div class="diagnostics" id="diagnostics-box">
+                <div class="diag-header">Signal Telemetry</div>
+                <div id="diag-items"></div>
+            </div>
+
+            <!-- Reasoning / details -->
+            <div class="reasoning-box" id="reasoning-box" style="display:none;">
+                <span class="reasoning-label">Reasoning</span>
+                <span id="reasoning-text"></span>
+            </div>
+        </div>
+
+    </div><!-- /card-body -->
+
+    <!-- FOOTER STATUS -->
+    <div class="card-footer">
+        <div class="status">
+            <span class="pulse-dot"></span>
+            <span>Secure link established · Encrypted</span>
         </div>
     </div>
 
-    <script>
-        function switchTab(tab) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-            
-            if (tab === 'text') {
-                document.querySelector('.tab:nth-child(1)').classList.add('active');
-                document.getElementById('text-tab').classList.add('active');
-            } else if (tab === 'audio') {
-                document.querySelector('.tab:nth-child(2)').classList.add('active');
-                document.getElementById('audio-tab').classList.add('active');
-            } else {
-                document.querySelector('.tab:nth-child(3)').classList.add('active');
-                document.getElementById('video-tab').classList.add('active');
-            }
-            
-            // Hide previous result
-            document.getElementById('result').style.display = 'none';
-        }
+</div><!-- /container -->
 
-        function showLoader(show) {
-            document.getElementById('loader').style.display = show ? 'block' : 'none';
-        }
+<!-- Toast Notification -->
+<div id="toast" class="toast">Analysis in progress... Please wait.</div>
 
-        function displayResult(data, type) {
-            const resultDiv = document.getElementById('result');
-            const title = document.getElementById('result-title');
-            const content = document.getElementById('result-content');
-            
-            resultDiv.className = 'result';
-            if (type === 'text') {
-                const isReal = data.label.includes('REAL');
-                resultDiv.classList.add(isReal ? 'real' : 'fake');
-                title.innerText = isReal ? '✅ Real News' : '❌ Fake News';
-                
-                let detailsHtml = `
-                    <p><strong>Probability (Real):</strong> ${(data.probability_real * 100).toFixed(1)}%</p>
-                    <p><strong>Probability (Fake):</strong> ${(data.probability_fake * 100).toFixed(1)}%</p>
-                    <div class="probability-bar">
-                        <div class="bar-fill ${isReal ? 'real' : 'fake'}" style="width: ${(data.probability_real * 100)}%"></div>
-                    </div>
-                    <p><strong>Evidence found:</strong> ${data.evidence_found ? 'Yes' : 'No'}</p>
-                    <p><strong>Reasoning:</strong> ${data.reasoning}</p>
-                    <h4>Agent Scores:</h4>
-                    <div class="detail-item"><span>FactCheck:</span> <span>${(data.details.factcheck * 100).toFixed(1)}%</span></div>
-                    <div class="detail-item"><span>NewsAPI:</span> <span>${(data.details.newsapi * 100).toFixed(1)}%</span></div>
-                    <div class="detail-item"><span>GNews:</span> <span>${(data.details.gnews * 100).toFixed(1)}%</span></div>
-                    <div class="detail-item"><span>LLM:</span> <span>${(data.details.llm * 100).toFixed(1)}%</span></div>
-                `;
-                content.innerHTML = detailsHtml;
-            } else if (type === 'audio') {
-                // Audio result
-                const isFake = data.label.includes('FAKE');
-                resultDiv.classList.add(isFake ? 'fake' : 'real');
-                title.innerText = isFake ? '🔴 Fake / Synthetic Audio' : '🟢 Real Human Voice';
-                
-                let detailsHtml = `
-                    <p><strong>Score:</strong> ${data.score.toFixed(4)} (0=real, 1=fake)</p>
-                    <p><strong>Confidence:</strong> ${(data.confidence * 100).toFixed(1)}%</p>
-                    <div class="probability-bar">
-                        <div class="bar-fill ${isFake ? 'fake' : 'real'}" style="width: ${data.confidence * 100}%"></div>
-                    </div>
-                `;
-                content.innerHTML = detailsHtml;
-            } else {
-                // Video result
-                const isFake = data.label.includes('FAKE');
-                resultDiv.classList.add(isFake ? 'fake' : 'real');
-                title.innerText = isFake ? '🔴 Fake / Synthetic Video' : (data.label.includes('UNABLE') ? '⚠️ Analysis Error' : '🟢 Real Human Video');
-                
-                if (data.label.includes('UNABLE')) {
-                    content.innerHTML = `<p>${data.details.message}</p>`;
-                } else {
-                    let detailsHtml = `
-                        <p><strong>Verdict:</strong> ${data.label}</p>
-                        <p><strong>Deepfake Probability:</strong> ${(data.score * 100).toFixed(1)}%</p>
-                        <div class="probability-bar">
-                            <div class="bar-fill ${isFake ? 'fake' : 'real'}" style="width: ${data.score * 100}%"></div>
-                        </div>
-                        <h4>Frame Analysis:</h4>
-                        <div class="detail-item"><span>Total Frames Scanned:</span> <span>${data.details.frames_analyzed}</span></div>
-                        <div class="detail-item"><span>Frames Flagged as Fake:</span> <span>${data.details.fake_frames} (${data.details.fake_percentage.toFixed(1)}%)</span></div>
-                    `;
-                    content.innerHTML = detailsHtml;
-                }
-            }
-            
-            resultDiv.style.display = 'block';
-        }
-
-        function showError(message) {
-            const resultDiv = document.getElementById('result');
-            const title = document.getElementById('result-title');
-            const content = document.getElementById('result-content');
-            
-            resultDiv.className = 'result';
-            title.innerText = '⚠️ Error';
-            content.innerHTML = `<p class="error">${message}</p>`;
-            resultDiv.style.display = 'block';
-        }
-
-        async function analyzeText() {
-            const text = document.getElementById('claim-text').value.trim();
-            if (!text) {
-                alert('Please enter some text.');
-                return;
-            }
-
-            showLoader(true);
-            document.getElementById('result').style.display = 'none';
-
-            try {
-                const response = await fetch('/predict/text', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ text })
-                });
-                
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.detail || 'Server error');
-                }
-                
-                const data = await response.json();
-                displayResult(data, 'text');
-            } catch (err) {
-                showError(err.message);
-            } finally {
-                showLoader(false);
-            }
-        }
-
-        async function analyzeAudio() {
-            const fileInput = document.getElementById('audio-file');
-            const file = fileInput.files[0];
-            if (!file) {
-                alert('Please select an audio file.');
-                return;
-            }
-
-            const formData = new FormData();
-            formData.append('file', file);
-
-            showLoader(true);
-            document.getElementById('result').style.display = 'none';
-
-            try {
-                const response = await fetch('/predict/audio', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.detail || 'Server error');
-                }
-                
-                const data = await response.json();
-                displayResult(data, 'audio');
-            } catch (err) {
-                showError(err.message);
-            } finally {
-                showLoader(false);
-            }
-        }
-
-        async function analyzeVideo() {
-            const fileInput = document.getElementById('video-file');
-            const file = fileInput.files[0];
-            if (!file) {
-                alert('Please select a video file.');
-                return;
-            }
-
-            const formData = new FormData();
-            formData.append('file', file);
-
-            showLoader(true);
-            document.getElementById('result').style.display = 'none';
-
-            try {
-                const response = await fetch('/predict/video', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                if (!response.ok) {
-                    const error = await response.json();
-                    throw new Error(error.detail || 'Server error');
-                }
-                
-                const data = await response.json();
-                displayResult(data, 'video');
-            } catch (err) {
-                showError(err.message);
-            } finally {
-                showLoader(false);
-            }
-        }
-    </script>
+<script src="/static/script.js"></script>
 </body>
 </html>

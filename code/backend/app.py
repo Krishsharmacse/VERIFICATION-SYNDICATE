@@ -32,6 +32,8 @@ from nltk import pos_tag
 from transformers import Wav2Vec2FeatureExtractor, AutoModel
 import nltk
 import uvicorn
+from sarvamai import SarvamAI
+from langdetect import detect, LangDetectException
 
 # ================= DOWNLOAD NLTK DATA =================
 nltk.download('punkt', quiet=True)
@@ -45,6 +47,7 @@ GOOGLE_FACT_CHECK_API_KEY = os.getenv("GOOGLE_FACT_CHECK_API_KEY")
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 GNEWS_API_KEY = os.getenv("GNEWS_API_KEY")
+SARVAM_API_KEY = os.getenv("Sarvam_API_LANGUAGE") or os.getenv("SARVAM_API_KEY")
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 MAX_LEN = 150
@@ -53,7 +56,35 @@ CSV_FILENAME = "agent_training_data.csv"
 stop_words = set(stopwords.words('english'))
 lemmatizer = WordNetLemmatizer()
 
+# --- INITIALIZE SARVAM CLIENT ---
+if SARVAM_API_KEY:
+    sarvam_client = SarvamAI(api_subscription_key=SARVAM_API_KEY)
+else:
+    sarvam_client = None
+    print("⚠️ SARVAM_API_KEY not found. Translation will be disabled.")
 
+
+
+# ================= TRANSLATION HELPER =================
+def translate_to_english(text):
+    if not sarvam_client:
+        return text
+    try:
+        response = sarvam_client.text.translate(
+            input=text,
+            source_language_code="auto",
+            target_language_code="en-IN", 
+            speaker_gender="Male"
+        )
+        if hasattr(response, 'translated_text'):
+            return response.translated_text
+        elif isinstance(response, dict) and 'translated_text' in response:
+            return response['translated_text']
+        else:
+            return str(response)
+    except Exception as e:
+        print(f"❌ Translation failed: {e}")
+        return text
 
 # ================= TEXT CLEAN & EXTRACT =================
 def clean_text(text):
@@ -199,6 +230,16 @@ def detect_news(text):
     print(f"📰 Claim: {text}")
     print("="*60)
     
+    # --- TRANSLATION LOGIC ---
+    try:
+        detected_lang = detect(text)
+        if detected_lang != 'en':
+            print(f"🌐 Non-English text detected ({detected_lang}). Translating to English via Sarvam AI...")
+            text = translate_to_english(text)
+            print(f"🗣️ Translated Claim: {text}")
+    except LangDetectException:
+        print("⚠️ Could not detect language reliably. Proceeding with original text.")
+        
     cleaned = clean_text(text)
 
     
@@ -457,10 +498,9 @@ class DeepfakeVideoDetector:
 # Global detector instance
 video_detector = None
 
-# ================= FASTAPI SETUP =================
 app = FastAPI(title="Fake News & Deepfake Audio Detector")
 
-# Serve HTML frontend
+app.mount("/static", StaticFiles(directory=r"C:\Users\ASUS\Desktop\Fake News\code\frontend"), name="static")
 templates = Jinja2Templates(directory=r"C:\Users\ASUS\Desktop\Fake News\code\frontend")
 
 @app.get("/", response_class=HTMLResponse)
