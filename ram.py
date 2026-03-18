@@ -1,15 +1,15 @@
-import torch
-import torch.nn as nn
-import pickle
 import re
 import requests
 import csv
 import os
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
-from nltk import pos_tag
 from dotenv import load_dotenv
+
+# Download required NLTK data for the smart query extractor
+import nltk
+nltk.download('punkt', quiet=True)
+nltk.download('averaged_perceptron_tagger', quiet=True)
+from nltk.tokenize import word_tokenize
+from nltk import pos_tag
 
 # ================= CONFIG =================
 load_dotenv()
@@ -18,122 +18,63 @@ NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 GNEWS_API_KEY = os.getenv("GNEWS_API_KEY")
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-MAX_LEN = 150
 CSV_FILENAME = "agent_training_data.csv"
+WIKI_USER_AGENT = "FactChecker/1.0"
 
-# Download NLTK data
-import nltk
-nltk.download('punkt', quiet=True)
-nltk.download('stopwords', quiet=True)
-nltk.download('wordnet', quiet=True)
-nltk.download('averaged_perceptron_tagger', quiet=True)
-
-stop_words = set(stopwords.words('english'))
-lemmatizer = WordNetLemmatizer()
-
-# ================= LOAD VOCAB =================
-try:
-    with open("vocab_nltk.pkl", "rb") as f:
-        vocab = pickle.load(f)
-    print(f"✅ Vocabulary loaded: {len(vocab)} words")
-except FileNotFoundError:
-    print("❌ vocab_nltk.pkl not found!")
-    exit(1)
-
-VOCAB_SIZE = len(vocab)
-
-# ================= MODEL =================
-class ImprovedBiLSTM(nn.Module):
-    def __init__(self, vocab_size, embed_dim=128, hidden_dim=128, num_layers=2, dropout=0.5):
-        super().__init__()
-        self.embedding = nn.Embedding(vocab_size, embed_dim, padding_idx=0)
-        self.embedding_dropout = nn.Dropout(dropout)
-        
-        self.lstm = nn.LSTM(embed_dim, hidden_dim, num_layers=num_layers,
-                            batch_first=True, bidirectional=True,
-                            dropout=dropout if num_layers > 1 else 0)
-        
-        self.attention = nn.Linear(hidden_dim * 2, 1)
-        
-        self.classifier = nn.Sequential(
-            nn.Linear(hidden_dim * 2, 128),
-            nn.BatchNorm1d(128), 
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(128, 64),
-            nn.BatchNorm1d(64),  
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(64, 1)
-        )
-
-    def forward(self, x):
-        embedded = self.embedding(x)
-        embedded = self.embedding_dropout(embedded)
-        lstm_out, _ = self.lstm(embedded)
-        attention_weights = torch.softmax(self.attention(lstm_out), dim=1)
-        attended = torch.sum(attention_weights * lstm_out, dim=1)
-        output = self.classifier(attended)
-        return output.squeeze()
-
-# Load model
-model_path = r"C:\Users\ASUS\Desktop\Fake News\fake_news_bilstm_nltk.pth"
-try:
-    model = ImprovedBiLSTM(VOCAB_SIZE).to(DEVICE)
-    state_dict = torch.load(model_path, map_location=DEVICE, weights_only=False)
-    model.load_state_dict(state_dict)
-    model.eval()
-    print("✅ Model loaded successfully")
-except Exception as e:
-    print(f"❌ Error loading model: {e}")
-    exit(1)
-
-# ================= TEXT CLEAN & EXTRACT =================
-def clean_text(text):
-    text = str(text).lower()
-    text = re.sub(r"http\S+|www\S+|https\S+", "", text)
-    text = re.sub(r"[^a-z\s]", " ", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    tokens = word_tokenize(text)
-    tokens = [t for t in tokens if t not in stop_words]
-    pos_tags = pos_tag(tokens)
-    lemmatized = []
-    for word, tag in pos_tags:
-        if tag.startswith('V'): pos='v'
-        elif tag.startswith('J'): pos='a'
-        elif tag.startswith('R'): pos='r'
-        else: pos='n'
-        lemmatized.append(lemmatizer.lemmatize(word, pos=pos))
-    return ' '.join(lemmatized)
-
-def text_to_seq(text):
-    seq = [vocab.get(w, 1) for w in text.split()]
-    if len(seq) < MAX_LEN:
-        seq += [0] * (MAX_LEN - len(seq))
-    else:
-        seq = seq[:MAX_LEN]
-    return seq
-
+# ================= TEXT EXTRACT =================
 def extract_smart_query(text):
+    """
+    Extracts nouns, proper nouns, verbs, and adjectives to form a search query.
+    Keeps the core action of the claim intact to avoid false positives.
+    """
+    # If the claim is short (under 6 words), just search the whole thing
+    words = text.split()
+    if len(words) <= 6:
+        return text.strip()
+
+    # Otherwise, extract important parts of speech
     tokens = word_tokenize(text)
     tags = pos_tag(tokens)
     
-    proper_nouns = [w for w, t in tags if t in ('NNP', 'NNPS') and len(w) > 2]
-    nouns = [w for w, t in tags if t in ('NN', 'NNS') and len(w) > 3]
+    # Keep Nouns (NN, NNP), Verbs (VB, VBD), and Adjectives (JJ)
+    important_words = [w for w, t in tags if t.startswith('NN') or t.startswith('VB') or t.startswith('JJ')]
     
-    combined = []
-    for word in proper_nouns + nouns:
-        if word not in combined:
-            combined.append(word)
-            
-    if not combined:
-        words = re.sub(r"[^a-zA-Z\s]", "", text).split()
-        combined = [w for w in words if len(w) > 4]
-        
-    return " ".join(combined[:5])
+    # Remove extremely common stop words that might have snuck in
+    important_words = [w for w in important_words if w.lower() not in ['is', 'are', 'was', 'were', 'be', 'have', 'has']]
+    
+    return " ".join(important_words[:6])
 
 # ================= AGENTS =================
+def wikipedia_check(text):
+    """Searches Wikipedia for the entities to verify baseline reality."""
+    try:
+        query = extract_smart_query(text)
+        if not query: return 0.20, 0.5, False
+        print(f"   [Wikipedia Searching for:] '{query}'")
+        
+        url = "https://en.wikipedia.org/w/api.php"
+        params = {
+            "action": "query",
+            "format": "json",
+            "list": "search",
+            "srsearch": query,
+            "utf8": 1,
+            "srlimit": 3
+        }
+        headers = {"User-Agent": WIKI_USER_AGENT}
+        r = requests.get(url, params=params, headers=headers, timeout=5)
+        
+        if r.status_code == 200:
+            data = r.json()
+            results = data.get("query", {}).get("search", [])
+            if results:
+                return 0.60, 0.7, True
+            return 0.30, 0.6, False
+        return 0.50, 0.5, False
+    except Exception as e:
+        print(f"   [!] Wikipedia API Failed: {e}")
+        return 0.50, 0.5, False
+
 def google_factcheck(text):
     try:
         params = {"query": text[:200], "key": GOOGLE_FACT_CHECK_API_KEY, "languageCode": "en"}
@@ -150,9 +91,7 @@ def google_factcheck(text):
                     elif "mostly true" in rating: return 0.80, 0.8, True
                     elif "mostly false" in rating: return 0.30, 0.8, True
                     elif "mixture" in rating or "half" in rating: return 0.50, 0.7, True
-            # Searched successfully, found nothing = Fake
             return 0.20, 0.5, False 
-        # Server error = Neutral
         return 0.50, 0.5, False
     except:
         return 0.50, 0.5, False
@@ -175,11 +114,10 @@ def newsapi_check(text):
                 
                 if reputable_count == 0: return 0.30, 0.7, False
                 
-                # Boosted formula! 1 reputable source = 75% confident it's real.
                 prob = min(0.65 + (reputable_count * 0.10), 0.95)
                 return prob, 0.8, True
             return 0.20, 0.5, False
-        return 0.50, 0.5, False # Neutral on API error
+        return 0.50, 0.5, False 
     except:
         return 0.50, 0.5, False
 
@@ -201,19 +139,28 @@ def gnews_check(text):
                 
                 if reputable_count == 0: return 0.30, 0.7, False
                 
-                # Boosted formula! 
                 prob = min(0.65 + (reputable_count * 0.10), 0.95)
                 return prob, 0.8, True
             return 0.20, 0.5, False
-        return 0.50, 0.5, False # Neutral on API error
+        return 0.50, 0.5, False 
     except:
         return 0.50, 0.5, False
 
 def openrouter_llm(text):
+    """Uses a free model to rate the truthfulness of the claim."""
     try:
-        prompt = f"Rate truthfulness (0.0-1.0). Reply ONLY with a decimal number between 0 and 1: {text[:200]}"
-        data = {"model": "google/gemini-2.0-flash-lite-preview-02-05:free", "messages": [{"role": "user", "content": prompt}], "temperature": 0.1}
-        headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
+        prompt = f"Rate the truthfulness of this claim on a scale from 0.0 (completely false) to 1.0 (completely true). Reply ONLY with a decimal number: '{text[:200]}'"
+        
+        data = {
+            "model": "google/gemini-2.0-flash:free", 
+            "messages": [{"role": "user", "content": prompt}], 
+            "temperature": 0.0 
+        }
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}", 
+            "Content-Type": "application/json"
+        }
+        
         r = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data, timeout=8)
         
         if r.status_code == 200:
@@ -223,20 +170,21 @@ def openrouter_llm(text):
                 return max(0.0, min(1.0, float(numbers[0]))), 0.8, True
             return 0.20, 0.5, False
         else:
-            print(f"   [!] LLM API Error: Status {r.status_code} (Returning Neutral 50%)")
+            print(f"   [!] LLM API Error: Status {r.status_code} - {r.text}")
             return 0.50, 0.5, False
+            
     except Exception as e:
-        print(f"   [!] LLM API Failed: {e} (Returning Neutral 50%)")
+        print(f"   [!] LLM API Failed Exception: {e}")
         return 0.50, 0.5, False
 
-# ================= DATA COLLECTION (FOR FUTURE ML) =================
-def save_to_csv(text, model_prob, fc_prob, fc_found, news_prob, news_found, gnews_prob, gnews_found, llm_prob, llm_found, final_prob, label):
+# ================= DATA COLLECTION =================
+def save_to_csv(text, wiki_prob, wiki_found, fc_prob, fc_found, news_prob, news_found, gnews_prob, gnews_found, llm_prob, llm_found, final_prob, label):
     file_exists = os.path.isfile(CSV_FILENAME)
     with open(CSV_FILENAME, mode='a', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
         if not file_exists:
-            writer.writerow(["claim_text", "bilstm_prob", "fc_prob", "fc_found", "newsapi_prob", "newsapi_found", "gnews_prob", "gnews_found", "llm_prob", "llm_found", "final_calculated_prob", "predicted_label"])
-        writer.writerow([text, model_prob, fc_prob, int(fc_found), news_prob, int(news_found), gnews_prob, int(gnews_found), llm_prob, int(llm_found), final_prob, label])
+            writer.writerow(["claim_text", "wiki_prob", "wiki_found", "fc_prob", "fc_found", "newsapi_prob", "newsapi_found", "gnews_prob", "gnews_found", "llm_prob", "llm_found", "final_calculated_prob", "predicted_label"])
+        writer.writerow([text, wiki_prob, int(wiki_found), fc_prob, int(fc_found), news_prob, int(news_found), gnews_prob, int(gnews_found), llm_prob, int(llm_found), final_prob, label])
 
 # ================= MAIN DETECTOR =================
 def detect_news(text):
@@ -244,28 +192,27 @@ def detect_news(text):
     print(f"📰 Claim: {text}")
     print("="*60)
     
-    cleaned = clean_text(text)
-    seq = text_to_seq(cleaned)
-    tensor = torch.tensor(seq).unsqueeze(0).to(DEVICE)
-    with torch.no_grad():
-        raw_prob = torch.sigmoid(model(tensor)).item()
+    # 1. Wikipedia Agent
+    wiki_prob, wiki_conf, wiki_found = wikipedia_check(text)
+    print(f"📚 Wikipedia: {wiki_prob:.1%} (found={wiki_found})")
     
-    model_prob = raw_prob * 0.80  
-    print(f"\n📊 BiLSTM: raw={raw_prob:.1%}, adjusted={model_prob:.1%}")
-    
+    # 2. FactCheck Agent
     fc_prob, fc_conf, fc_found = google_factcheck(text)
     print(f"🔍 FactCheck: {fc_prob:.1%} (found={fc_found})")
     
+    # 3. NewsAPI Agent
     news_prob, news_conf, news_found = newsapi_check(text)
     print(f"📰 NewsAPI: {news_prob:.1%} (found={news_found})")
     
+    # 4. GNews Agent
     gnews_prob, gnews_conf, gnews_found = gnews_check(text)
     print(f"🗞️ GNews: {gnews_prob:.1%} (found={gnews_found})")
     
+    # 5. LLM Agent
     llm_prob, llm_conf, llm_found = openrouter_llm(text)
     print(f"🤖 LLM: {llm_prob:.1%} (found={llm_found})")
     
-    evidence_found = fc_found or news_found or gnews_found or llm_found
+    evidence_found = wiki_found or fc_found or news_found or gnews_found or llm_found
     
     if not evidence_found:
         print("\n⚠️⚠️⚠️ NO EXTERNAL EVIDENCE FOUND ⚠️⚠️⚠️")
@@ -274,10 +221,9 @@ def detect_news(text):
         final_prob = 0.20  
         label = "❌ FAKE NEWS"
         reasoning = "No evidence found anywhere on the internet"
-    
-    else:
-        # Base weights map to: [model, factcheck, newsapi, gnews, llm]
         
+    else:
+        # Base weights map to: [wiki, factcheck, newsapi, gnews, llm]
         if fc_found:
             print("\n   [!] Dynamic Route: Trusting FactCheck database.")
             weights = [0.05, 0.65, 0.10, 0.10, 0.10]
@@ -297,16 +243,16 @@ def detect_news(text):
             
         elif llm_found and not (gnews_found or news_found):
             print("\n   [!] Dynamic Route: Trusting LLM for general knowledge/myth.")
-            weights = [0.10, 0.10, 0.10, 0.10, 0.60]
+            weights = [0.05, 0.10, 0.10, 0.10, 0.65]
             reasoning = "LLM knowledge utilized due to lack of recent news."
             
         else:
             print("\n   [!] Dynamic Route: Using balanced fallback weights.")
-            weights = [0.05, 0.25, 0.15, 0.40, 0.15] 
+            weights = [0.20, 0.20, 0.20, 0.20, 0.20] 
             reasoning = "Fallback balanced routing."
         
         active_weights = weights
-        active_probs = [model_prob, fc_prob, news_prob, gnews_prob, llm_prob]
+        active_probs = [wiki_prob, fc_prob, news_prob, gnews_prob, llm_prob]
         
         total_weight = sum(active_weights)
         norm_weights = [w/total_weight for w in active_weights]
@@ -322,7 +268,7 @@ def detect_news(text):
     print(f"   Evidence found: {'✓' if evidence_found else '✗ NONE'}")
     print(f"{'='*60}")
     
-    save_to_csv(text, model_prob, fc_prob, fc_found, news_prob, news_found, gnews_prob, gnews_found, llm_prob, llm_found, final_prob, label)
+    save_to_csv(text, wiki_prob, wiki_found, fc_prob, fc_found, news_prob, news_found, gnews_prob, gnews_found, llm_prob, llm_found, final_prob, label)
     
     return {'label': label, 'probability': final_prob, 'evidence_found': evidence_found, 'reasoning': reasoning}
 
@@ -334,8 +280,9 @@ if __name__ == "__main__":
     print("="*60)
     
     samples = [
-        """kim jong un fires ballistic missiles""",
-        """The 2023 World Press Freedom Index, released annually by Reporters Without Borders (RSF), highlights the increasingly perilous situation for reporters on every continent, as journalists face political, social, and technological threats. The report was released on World Press Freedom Day, which GIJN marked with a specific look at how investigative journalists are confronted with challenges to their work in Latin America, Africa, Central Asia, and the Middle East.""",
+        "kim jong un fires ballistic missiles",
+        "usa attack iran",
+        "Narendra modi is randwa"
     ]
     
     for i, s in enumerate(samples, 1):

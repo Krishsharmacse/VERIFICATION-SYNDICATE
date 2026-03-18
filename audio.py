@@ -97,6 +97,6 @@ if __name__ == "__main__":
     # 👉 Change this path to the audio file you want to test
     # You can drag and drop an audio file into your VS Code terminal to get its path!
     
-    test_file = r"C:\Users\ASUS\Downloads\voice_preview_nikita - encouraging, clear and serious.mp3"
+    test_file = r"C:\Users\ASUS\Downloads\Saiyaara Feat. Modi Ji 😀(MP3_160K).mp3"
     
     predict_audio(test_file)

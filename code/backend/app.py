@@ -317,7 +317,7 @@ def detect_news(text):
         }
     }
 
-KERAS_MODEL_PATH = r"C:\Users\ASUS\Desktop\Fake News\ALL MODELS\wavlm_classifier_v2.keras"
+KERAS_MODEL_PATH = r"D:\Verification Syndicate\Fake News\ALL MODELS\wavlm_classifier_v2.keras"
 WAVLM_MODEL_NAME = "microsoft/wavlm-base-plus"
 SAMPLE_RATE = 16000
 MAX_DURATION = 5
@@ -367,7 +367,7 @@ def predict_audio(file_bytes):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-VIDEO_MODEL_PATH = r"C:\Users\ASUS\Desktop\Fake News\ALL MODELS\best_celebdf_model_Krish.pt" 
+VIDEO_MODEL_PATH = r"D:\Verification Syndicate\Fake News\ALL MODELS\best_celebdf_model_Krish.pt"
 VIDEO_INPUT_SIZE = 224
 VIDEO_SEQ_LENGTH = 16        
 VIDEO_CONFIDENCE_THRESHOLD = 0.60
@@ -402,7 +402,7 @@ class CNN_BiLSTM_Video(nn.Module):
 class DeepfakeVideoDetector:
     def __init__(self):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.face_model = YOLO(r"C:\Users\ASUS\Desktop\Fake News\yolov8s-face-lindevs.onnx", task='detect') 
+        self.face_model = YOLO(r"D:\Verification Syndicate\Fake News\yolov8s-face-lindevs.onnx", task='detect') 
         self.model = CNN_BiLSTM_Video().to(self.device)
         self.model.load_state_dict(torch.load(VIDEO_MODEL_PATH, map_location=self.device))
         self.model.eval()
@@ -488,8 +488,8 @@ video_detector = None
 
 app = FastAPI(title="Fake News & Deepfake Audio Detector")
 
-app.mount("/static", StaticFiles(directory=r"C:\Users\ASUS\Desktop\Fake News\code\frontend"), name="static")
-templates = Jinja2Templates(directory=r"C:\Users\ASUS\Desktop\Fake News\code\frontend")
+app.mount("/static", StaticFiles(directory=r"D:\Verification Syndicate\Fake News\code\frontend"), name="static")
+templates = Jinja2Templates(directory=r"D:\Verification Syndicate\Fake News\code\frontend")
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):
